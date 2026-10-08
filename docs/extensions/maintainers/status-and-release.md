@@ -6,6 +6,11 @@ This page defines what may ship from the current branch. Implementation instruct
 
 ## Release boundary
 
+This checkout's simplified TV distribution exposes only the bundled IPTV list
+and player, not provider or extension settings. Historical TV provider evidence
+below does not validate the current TV UI. Its replacement device coverage is
+`TvIptvNavigationTest`; see the [TV build instructions](../../../README.md#simplified-iptv-tv-build).
+
 - The built-in Emby/Jellyfin extension follows the normal product release gate.
 - External APK extensions remain an opt-in developer preview behind the developer switch.
 - Keep the switch until the external-opening gates are green and the threat model below is
@@ -23,7 +28,7 @@ This page defines what may ship from the current branch. Implementation instruct
 | External lifecycle | Discovery, identity and certificate trust, review-bound enable/reauthorize tokens, enable/disable, capability and fixed-origin authorization, reconnect, clear data, diagnostics, file-backed large-payload transfer, and cancellation | Transport tests, `ExtensionPluginRepositoryLifecycleTest`, and `ExternalExtensionIpcTest` |
 | Extension settings | Manifest and dynamic schemas, ordinary values, encrypted secret handles, network-origin approval, and review-bound field edits. Dynamic state is bound to one runtime registration and stays hidden after failure, disablement, or replacement until the current registration verifies it. | `ExtensionSettingsRepositoryTest`, `ExtensionPluginRepositoryLifecycleTest`, and `ExtensionHookBrokerScopeProviderTest` |
 | External reference provider | Discover, host-managed login, initial and later refresh, Room import, credential-backed playback resolve, header resolution, and session close cross Binder and use the same repository as built-in providers. | `ExternalProviderEndToEndTest` |
-| Provider UI | Phone and TV use descriptor-driven provider lists and forms; Emby and Jellyfin remain separate choices, while external choices retain visible provider identity | `SubscriptionSourceSelectionTest`, `TvProviderAccessibilityTest`, and `ResourceContractTest`; connected UI tests currently require an explicit device run |
+| Provider UI | Phone uses descriptor-driven provider lists and forms; Emby and Jellyfin remain separate choices, while external choices retain visible provider identity. The simplified TV UI has no provider setup. | `SubscriptionSourceSelectionTest` and `ResourceContractTest`; connected UI tests currently require an explicit device run |
 | Other Hooks | Settings, search, metadata enrichment, and EPG refresh have typed SDK handlers and product callers | SDK, contribution repository/importer, and IPC tests |
 | Background task | Manifest task declarations are reconciled into periodic WorkManager jobs when an extension is enabled, reauthorized, or restored. Disablement or missing grants cancels them; network tasks use a connected constraint. | `ExtensionBackgroundTaskSchedulerTest`, Worker tests, and `ExtensionPluginRepositoryLifecycleTest` |
 
@@ -56,7 +61,7 @@ Latest connected tablet run, 2026-07-29:
   external-plugin management lifecycle with the Settings side rail present and selected.
   The medium case also verifies the single-pane header, back navigation, and its 48dp touch target.
 
-The latest TV evidence remains the 2026-07-28 API 34 run at 1280×720:
+Historical TV provider evidence is the 2026-07-28 API 34 run at 1280×720:
 `TvProviderAccessibilityTest` passed 1/1 in English LTR and 1/1 in actual `ar-XB` RTL with
 the rail on the right, including DPad entry, provider-form open/close, accessible naming,
 and focus return to Emby. TV was not rerun as part of the phone command below.

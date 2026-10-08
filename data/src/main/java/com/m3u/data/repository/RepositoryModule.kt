@@ -8,6 +8,8 @@ import com.m3u.data.repository.media.MediaRepository
 import com.m3u.data.repository.media.MediaRepositoryImpl
 import com.m3u.data.repository.playlist.PlaylistRepository
 import com.m3u.data.repository.playlist.PlaylistRepositoryImpl
+import com.m3u.data.repository.playlist.BundledIptvRepository
+import com.m3u.data.repository.playlist.BundledIptvRepositoryImpl
 import com.m3u.data.repository.programme.ProgrammeRepository
 import com.m3u.data.repository.programme.ProgrammeRepositoryImpl
 import com.m3u.data.repository.tv.TvRepository
@@ -21,6 +23,12 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 internal interface RepositoryModule {
+    @Binds
+    @Singleton
+    fun bindBundledIptvRepository(
+        repository: BundledIptvRepositoryImpl
+    ): BundledIptvRepository
+
     @Binds
     @Singleton
     fun bindPlaylistRepository(

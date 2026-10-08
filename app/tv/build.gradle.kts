@@ -16,8 +16,8 @@ android {
         applicationId = "com.m3u.tv"
         minSdk = 26
         targetSdk = 33
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["m3uMockServerUrl"] = m3uMockServerUrl.get()
@@ -47,6 +47,7 @@ android {
         compose = true
         buildConfig = true
     }
+    sourceSets.getByName("test").resources.srcDir("src/main/assets")
     packaging {
         resources.excludes += "META-INF/**"
     }
@@ -56,9 +57,7 @@ tasks.matching { task ->
     task.name.startsWith("connected") && task.name.endsWith("AndroidTest")
 }.configureEach {
     dependsOn(":testing:mock-server:startMockServer")
-    dependsOn(":testing:extension-reference:installDebug")
     finalizedBy(":testing:mock-server:stopMockServer")
-    finalizedBy(":testing:extension-reference:uninstallDebug")
 }
 
 hilt {
@@ -132,6 +131,7 @@ dependencies {
     implementation(libs.haze.materials)
 
     testImplementation(kotlin("test-junit"))
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.runner)

@@ -6,6 +6,10 @@
 
 ## 发布边界
 
+当前工作树的简化 TV 版只提供内置 IPTV 列表和播放器，不提供 Provider 或插件设置。
+下方历史 TV Provider 实测不能用于验证当前 TV 界面。替代设备测试为
+`TvIptvNavigationTest`，参见 [TV 构建说明](../../../README.md#simplified-iptv-tv-build)。
+
 - Emby/Jellyfin 内置插件按正常产品门槛发布。
 - 外部 APK 插件仍是需要通过开发者开关主动启用的预览能力。
 - 外部开放清单完成且下方威胁模型正式确定前，保留该开关。
@@ -22,7 +26,7 @@
 | 外部插件生命周期 | 发现、身份与证书信任、与审阅内容绑定的启用/重新授权 Token、启停、Capability 与固定 Origin 授权、重连、清除数据、诊断、文件承载的大 Payload 传输和取消 | Transport 测试、`ExtensionPluginRepositoryLifecycleTest` 与 `ExternalExtensionIpcTest` |
 | 插件设置 | Manifest 与动态 Schema、普通值、加密 Secret Handle、网络 Origin 授权，以及与已显示字段绑定的编辑。动态状态绑定一次 Runtime 注册；失败、停用或替换后保持隐藏，直到当前注册重新校验。 | `ExtensionSettingsRepositoryTest`、`ExtensionPluginRepositoryLifecycleTest` 与 `ExtensionHookBrokerScopeProviderTest` |
 | 外部参考 Provider | 发现、宿主管理登录、首次与后续刷新、Room 导入、带凭据的播放解析、Header 解析与 Session 关闭都跨 Binder 运行，并与内置 Provider 共用 Repository | `ExternalProviderEndToEndTest` |
-| Provider 界面 | 手机和 TV 都由 Descriptor 生成 Provider 列表与表单；Emby 与 Jellyfin 保持独立选项，外部 Provider 选项保留可见的来源身份 | `SubscriptionSourceSelectionTest`、`TvProviderAccessibilityTest` 与 `ResourceContractTest`；Connected UI 测试目前需要显式设备运行 |
+| Provider 界面 | 手机由 Descriptor 生成 Provider 列表与表单；Emby 与 Jellyfin 保持独立选项，外部 Provider 选项保留可见的来源身份。简化 TV 界面不提供 Provider 配置。 | `SubscriptionSourceSelectionTest` 与 `ResourceContractTest`；Connected UI 测试目前需要显式设备运行 |
 | 其他 Hook | 设置、搜索、Metadata 与 EPG 已有类型化 SDK Handler 和产品调用点 | SDK、Contribution Repository/Importer 与 IPC 测试 |
 | 后台任务 | 插件启用、重新授权或恢复时，manifest 任务声明会对齐为 WorkManager 周期任务。停用或缺少授权时取消；联网任务带联网约束。 | `ExtensionBackgroundTaskSchedulerTest`、Worker 测试与 `ExtensionPluginRepositoryLifecycleTest` |
 
@@ -53,7 +57,7 @@ Connected Test，但不会执行这些设备矩阵。
   侧栏保持显示和选中时的完整外部插件管理流程。中宽用例还验证单面板标题、返回导航
   与 48dp 触控范围。
 
-最近的 TV 证据仍是 2026-07-28 在 API 34、1280×720 下的结果：
+历史 TV Provider 证据为 2026-07-28 在 API 34、1280×720 下的结果：
 `TvProviderAccessibilityTest` 在英语 LTR
 与实际 `ar-XB` RTL（侧栏位于右侧）下分别为 1/1，覆盖 DPad 进入、打开和关闭 Provider
 表单、可朗读名称，以及焦点返回 Emby。下面的手机命令没有重跑 TV。

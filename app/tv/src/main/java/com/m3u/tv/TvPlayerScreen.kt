@@ -47,7 +47,8 @@ fun TvPlayerScreen(
     playbackState: Int,
     onPlayPause: () -> Unit,
     onBack: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    errorMessage: String? = null,
 ) {
     BackHandler(onBack = onBack)
     val playPauseFocusRequester = remember { FocusRequester() }
@@ -115,8 +116,8 @@ fun TvPlayerScreen(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = playerStateText(playbackState),
-                    color = TvColors.TextSecondary,
+                    text = errorMessage ?: playerStateText(playbackState),
+                    color = if (errorMessage != null) TvColors.Danger else TvColors.TextSecondary,
                     fontSize = 13.sp,
                     fontFamily = TvFonts.Body,
                     maxLines = 1
