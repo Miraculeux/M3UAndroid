@@ -58,6 +58,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.focused
 import androidx.compose.ui.semantics.onClick as semanticsOnClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -248,7 +249,6 @@ fun FocusFrame(
                             role = null,
                             onClick = onClick,
                         )
-                        .focusable()
                 } else if (focusableWhenDisabled) {
                     Modifier.focusable()
                 } else {
@@ -259,6 +259,7 @@ fun FocusFrame(
                 if (semanticRole != null && semanticsLabel != null) {
                     Modifier.clearAndSetSemantics {
                         contentDescription = semanticsLabel
+                        this.focused = focused
                         selectionState?.let { isSelected ->
                             this.selected = isSelected
                         }

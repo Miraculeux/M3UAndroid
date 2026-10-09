@@ -20,12 +20,19 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.tv.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,10 +55,21 @@ fun TvPlayerScreen(
     onPlayPause: () -> Unit,
     onBack: () -> Unit,
     onClose: () -> Unit,
+    onPreviousChannel: () -> Unit,
+    onNextChannel: () -> Unit,
     errorMessage: String? = null,
 ) {
     BackHandler(onBack = onBack)
     val playPauseFocusRequester = remember { FocusRequester() }
+    val view = LocalView.current
+
+    DisposableEffect(view) {
+        val previousKeepScreenOn = view.keepScreenOn
+        view.keepScreenOn = true
+        onDispose {
+            view.keepScreenOn = previousKeepScreenOn
+        }
+    }
 
     LaunchedEffect(Unit) {
         yield()
@@ -62,6 +80,17 @@ fun TvPlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .onPreviewKeyEvent { event ->
+                when (event.key) {
+                    Key.DirectionUp, Key.DirectionDown -> {
+                        if (event.type == KeyEventType.KeyUp) {
+                            if (event.key == Key.DirectionUp) onPreviousChannel() else onNextChannel()
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            }
     ) {
         if (player != null) {
             PlayerSurface(

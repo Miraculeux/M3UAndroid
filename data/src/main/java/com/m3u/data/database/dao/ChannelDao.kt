@@ -143,9 +143,9 @@ interface ChannelDao {
 
     @Query(
         """
-        DELETE FROM channel_metadata_bases AS base
-        WHERE base.playlist_url = :playlistUrl
-        AND base.channel_reference NOT IN (
+        DELETE FROM channel_metadata_bases
+        WHERE channel_metadata_bases.playlist_url = :playlistUrl
+        AND channel_metadata_bases.channel_reference NOT IN (
             SELECT streams.relation_id
             FROM streams
             WHERE streams.playlist_url = :playlistUrl

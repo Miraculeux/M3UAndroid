@@ -294,6 +294,34 @@ class ExtensionContributionImporterTest {
     }
 
     @Test
+    fun orphanCleanupOnlyDeletesMetadataFromTheRequestedPlaylist() = runBlocking {
+        val otherPlaylistUrl = "https://example.test/other.m3u"
+        database.playlistDao().insertOrReplace(
+            Playlist(title = "Other", url = otherPlaylistUrl, source = DataSource.M3U)
+        )
+        database.channelDao().insertOrReplace(
+            Channel(
+                url = "https://example.test/other.ts",
+                category = "Other category",
+                title = "Other title",
+                playlistUrl = otherPlaylistUrl,
+                relationId = CHANNEL_REFERENCE,
+            )
+        )
+        database.channelDao().deleteByPlaylistUrl(PLAYLIST_URL)
+        database.channelDao().deleteByPlaylistUrl(otherPlaylistUrl)
+
+        assertEquals(1, database.channelDao().deleteOrphanedMetadata(PLAYLIST_URL))
+        assertTrue(database.channelDao().getMetadataBases(PLAYLIST_URL).isEmpty())
+        assertEquals(
+            CHANNEL_REFERENCE,
+            database.channelDao().getMetadataBases(otherPlaylistUrl).single().channelReference,
+        )
+        assertEquals(1, database.channelDao().deleteOrphanedMetadata(otherPlaylistUrl))
+        assertTrue(database.channelDao().getMetadataBases(otherPlaylistUrl).isEmpty())
+    }
+
+    @Test
     fun deleteThenReimportKeepsOverlayButOrphanCleanupPreventsLaterResurrection() = runBlocking {
         importer.applyMetadataEnrichment(
             PLAYLIST_URL,

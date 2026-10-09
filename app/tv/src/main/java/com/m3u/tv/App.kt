@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -22,7 +22,7 @@ fun App(viewModel: TvIptvViewModel = hiltViewModel()) {
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
     val playbackException by viewModel.playbackException.collectAsStateWithLifecycle()
-    val listState = rememberLazyListState()
+    val listState = rememberLazyGridState()
 
     Box(
         modifier = Modifier
@@ -44,6 +44,8 @@ fun App(viewModel: TvIptvViewModel = hiltViewModel()) {
                 onPlayPause = { viewModel.pauseOrContinue(!isPlaying) },
                 onBack = viewModel::closePlayer,
                 onClose = viewModel::closePlayer,
+                onPreviousChannel = viewModel::previousChannel,
+                onNextChannel = viewModel::nextChannel,
             )
         } else {
             TvIptvChannelList(

@@ -9,10 +9,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.runtime.Composable
@@ -22,6 +22,8 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -40,28 +42,30 @@ import com.m3u.i18n.R.string
 @Composable
 fun TvIptvChannelList(
     state: TvIptvUiState,
-    listState: LazyListState,
+    listState: LazyGridState,
     onFocus: (Channel) -> Unit,
     onPlay: (Channel) -> Unit,
     onRetry: () -> Unit,
 ) {
     val initialFocusRequester = remember { FocusRequester() }
+    val inputModeManager = LocalInputModeManager.current
     val initialChannelId = remember(state.channels) {
         state.channels.firstOrNull { it.id == state.focusedChannelId }?.id
             ?: state.channels.firstOrNull()?.id
     }
     LaunchedEffect(state.channels, state.loading, state.loadFailed) {
-        if (state.loadFailed) {
-            repeat(2) { withFrameNanos { } }
-            initialFocusRequester.requestFocus()
-        } else if (!state.loading && state.channels.isNotEmpty()) {
+        if (state.loading || (!state.loadFailed && state.channels.isEmpty())) {
+            return@LaunchedEffect
+        }
+        if (!state.loadFailed) {
             val index = state.channels.indexOfFirst { it.id == initialChannelId }
             if (listState.layoutInfo.visibleItemsInfo.none { it.index == index }) {
                 listState.scrollToItem(index)
             }
-            repeat(2) { withFrameNanos { } }
-            initialFocusRequester.requestFocus()
         }
+        repeat(2) { withFrameNanos { } }
+        inputModeManager.requestInputMode(InputMode.Keyboard)
+        initialFocusRequester.requestFocus()
     }
 
     Column(
@@ -104,9 +108,11 @@ fun TvIptvChannelList(
                     )
                 }
             }
-            else -> LazyColumn(
+            else -> LazyVerticalGrid(
+                columns = GridCells.Fixed(4),
                 state = listState,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
@@ -125,35 +131,38 @@ fun TvIptvChannelList(
                         focusedScale = 1.01f,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 72.dp),
+                            .heightIn(min = 88.dp),
                     ) { focused ->
                         val textColor = if (focused) TvColors.OnFocus else TvColors.TextPrimary
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(24.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                         ) {
-                            Text(
-                                text = (index + 1).toString(),
-                                color = textColor,
-                                fontSize = 20.sp,
-                                modifier = Modifier.width(56.dp),
-                            )
-                            Text(
-                                text = channel.title,
-                                color = textColor,
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Text(
+                                    text = (index + 1).toString(),
+                                    color = textColor,
+                                    fontSize = 16.sp,
+                                )
+                                Text(
+                                    text = channel.title,
+                                    color = textColor,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
                             Text(
                                 text = channel.category,
-                                color = textColor,
-                                fontSize = 18.sp,
-                                maxLines = 2,
-                                modifier = Modifier.width(144.dp),
+                                color = if (focused) TvColors.OnFocus else TvColors.TextSecondary,
+                                fontSize = 16.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }

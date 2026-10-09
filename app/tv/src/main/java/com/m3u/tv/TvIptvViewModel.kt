@@ -103,6 +103,23 @@ class TvIptvViewModel @Inject constructor(
         }
     }
 
+    fun previousChannel() {
+        switchChannel(-1)
+    }
+
+    fun nextChannel() {
+        switchChannel(1)
+    }
+
+    private fun switchChannel(offset: Int) {
+        val state = _state.value
+        val playingChannel = state.playingChannel ?: return
+        val index = state.channels.indexOfFirst { it.id == playingChannel.id }
+        check(index >= 0) { "The playing IPTV channel is missing from the channel list" }
+        val nextIndex = (index + offset + state.channels.size) % state.channels.size
+        play(state.channels[nextIndex])
+    }
+
     fun pauseOrContinue(continuePlayback: Boolean) {
         playerManager.pauseOrContinue(continuePlayback)
     }

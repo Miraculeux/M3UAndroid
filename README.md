@@ -104,7 +104,7 @@ present. Before working with the excluded files, fetch the full working tree wit
 
 ## Simplified IPTV TV build
 
-The TV app starts directly in a DPad-focused channel list imported from
+The TV app starts directly in a DPad-focused four-column channel grid imported from
 [`app/tv/src/main/assets/iptv.m3u`](app/tv/src/main/assets/iptv.m3u). The bundled
 snapshot contains 191 entries from the local `Iptv.m3u`, including alternate
 sources for the same channel. No playlist URL, import action, favorites menu,
@@ -115,6 +115,16 @@ Press the remote's OK/Select button on a channel to start playback. Back or the
 player's Close button stops playback and returns to the same list, restoring
 the selected channel's focus and retaining list scroll state. Loading errors
 show a retry action, and stream errors remain visible in the player.
+In the grid, Left/Right move between columns and Up/Down move between rows.
+During playback, Up switches to the previous playlist entry and Down switches
+to the next entry, wrapping between the first and last entries. Alternate
+sources with the same channel name remain separate entries. Back/Close restores
+focus to the currently playing entry, scrolling the grid to it when necessary.
+The TV player keeps the screen awake while its playback page is visible,
+including buffering, channel switches, and pauses. Returning to the grid
+restores the view's previous keep-screen-on setting. This uses Android's
+foreground-view mechanism, not a background wake lock or a device-wide
+screensaver setting; Android stops honoring it when the app is in the background.
 
 The playlist is embedded, but its 188 LAN streams still require the Mac's UDPxy
 service at `192.168.50.11:8888` and a reachable LAN connection. The three original
@@ -135,6 +145,63 @@ Validate the TV build:
 On a connected TV or emulator, run the real import, DPad focus, and playback
 return tests with `:app:tv:connectedDebugAndroidTest` and
 `-Pandroid.testInstrumentationRunnerArguments.class=com.m3u.testing.TvIptvNavigationTest`.
+
+Build the optimized TV release:
+
+```bash
+./gradlew :app:tv:assembleRelease --max-workers=2 \
+  -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8"
+```
+
+The APK is written to
+`app/tv/build/outputs/published-apk/release/tv-1.0.5.apk`. The current release
+configuration uses the existing debug signing key; it is not a production
+signing setup.
+
+TV 1.0.3 fixes an Android 9 startup `VerifyError`: R8 had merged Netty's
+runtime-guarded `VarHandleByteBufferAccess` methods into a class loaded by
+`WindowCompat`. The targeted TV ProGuard rule keeps these methods isolated
+without disabling optimization for the rest of the app.
+Channel metadata orphan cleanup also avoids a `DELETE` table alias unsupported
+by older system SQLite versions. This does not change the database schema or
+which playlist's orphaned metadata is removed.
+TV cards use a single focus target, expose focus in their accessibility labels,
+and restore keyboard input mode before focusing the list, including after a
+pointer click on the player's Close button.
+
+When changing R8 rules or Netty dependencies, test the actual release APK on
+Android 9 (API 28) as well as a newer Android TV device/emulator. Check the
+191-channel startup list, DPad selection, playback, Back/Close focus restoration,
+and repeated cold starts. Debug-only tests cannot detect this release regression.
+An ARM64 Android 9 AOSP emulator checks OS compatibility, not Zidoo's Realtek
+hardware or vendor firmware.
+
+TV 1.0.3 validation: 35 TV unit tests, two metadata orphan-cleanup tests on
+Android 9, and all three TV navigation instrumentation tests on Android 9
+passed. The optimized release APK was also exercised on Android 9 ARM64 AOSP
+and Android 14 ARM64 TV: 191-channel list, actual CCTV1 playback, and Back/Close
+focus restoration passed without crashes. Android 9 passed three consecutive
+cold starts. Zidoo Z9X hardware remains unverified.
+
+TV 1.0.4 adds the four-column grid and wrapping Up/Down playback switching.
+Validation includes 40 TV unit tests and six navigation tests covering card
+bounds, row/column movement, switching, wrapping, and Back/Close focus restoration.
+Android 13+ navigation tests refresh the accessibility cache before checking
+focus on retained Compose nodes. The optimized release was also checked on
+Android 9 ARM64 and Android 14 ARM64 TV for four-column layout, actual playback
+and channel switching, and return focus; no crashes were observed.
+
+TV 1.0.5 restores the keep-screen-on behavior missing from the Compose TV
+video surface. Regression tests check that playback and channel switching keep
+the screen awake, Back/Close restore normal idle behavior, and activity
+recreation reapplies the setting to the new view. Zidoo's vendor screensaver
+behavior still requires real-device confirmation.
+All eight TV navigation/lifecycle tests passed on Android 9. With the emulator's
+plugged-in stay-awake option disabled and screen timeout temporarily set to
+10 seconds, the actual release kept CCTV1 playback awake for 25 idle seconds
+and retained `KEEP_SCREEN_ON` when switching channels. Back removed the flag
+and the grid allowed normal sleep after another 25 idle seconds. The emulator's
+original settings were restored after validation.
 
 ## License
 

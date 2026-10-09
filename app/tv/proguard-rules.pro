@@ -22,6 +22,9 @@
 
 -dontwarn reactor.blockhound.integration.BlockHoundIntegration
 
+# Prevent guarded VarHandle bytecode from merging into classes loaded on older Android.
+-keep,allowshrinking,allowobfuscation class io.netty.buffer.VarHandleByteBufferAccess { *; }
+
 -dontwarn io.netty.internal.tcnative.AsyncSSLPrivateKeyMethod
 -dontwarn io.netty.internal.tcnative.AsyncTask
 -dontwarn io.netty.internal.tcnative.Buffer

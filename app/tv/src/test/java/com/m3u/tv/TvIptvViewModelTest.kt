@@ -85,6 +85,110 @@ class TvIptvViewModelTest {
     }
 
     @Test
+    fun `up and down switch by playlist order rather than channel id`() = runTest {
+        val entries = listOf(channels[0].copy(id = 40), channels[1].copy(id = 7), channels[0].copy(id = 91))
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(BundledIptvRepository { entries }, player)
+        runCurrent()
+        viewModel.play(entries[0])
+        runCurrent()
+        viewModel.nextChannel()
+        runCurrent()
+        assertEquals(entries[1], viewModel.state.value.playingChannel)
+        viewModel.nextChannel()
+        runCurrent()
+        assertEquals(entries[2], viewModel.state.value.playingChannel)
+        viewModel.previousChannel()
+        runCurrent()
+        assertEquals(entries[1], viewModel.state.value.playingChannel)
+        assertEquals<List<MediaCommand>>(
+            listOf(40, 7, 91, 7).map(MediaCommand::Common),
+            player.commands,
+        )
+        assertFalse(player.appliedContinueWatching)
+        viewModel.closePlayer()
+        assertEquals(entries[1].id, viewModel.state.value.focusedChannelId)
+    }
+
+    @Test
+    fun `channel switching wraps between the first and last entries`() = runTest {
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(BundledIptvRepository { channels }, player)
+        runCurrent()
+        viewModel.play(channels.first())
+        runCurrent()
+        viewModel.previousChannel()
+        runCurrent()
+        assertEquals(channels.last(), viewModel.state.value.playingChannel)
+        viewModel.nextChannel()
+        runCurrent()
+        assertEquals(channels.first(), viewModel.state.value.playingChannel)
+        assertEquals<List<MediaCommand>>(
+            listOf(1, 2, 1).map(MediaCommand::Common),
+            player.commands,
+        )
+    }
+
+    @Test
+    fun `channel switching does not autoplay while the list is open`() = runTest {
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(BundledIptvRepository { channels }, player)
+        viewModel.previousChannel()
+        viewModel.nextChannel()
+        runCurrent()
+        viewModel.previousChannel()
+        viewModel.nextChannel()
+        runCurrent()
+        assertNull(viewModel.state.value.playingChannel)
+        assertTrue(player.commands.isEmpty())
+    }
+
+    @Test
+    fun `a single channel wraps safely to itself`() = runTest {
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(BundledIptvRepository { channels.take(1) }, player)
+        runCurrent()
+        viewModel.play(channels.first())
+        runCurrent()
+        viewModel.previousChannel()
+        runCurrent()
+        viewModel.nextChannel()
+        runCurrent()
+        assertEquals(channels.first(), viewModel.state.value.playingChannel)
+        assertEquals<List<MediaCommand>>(
+            List(3) { MediaCommand.Common(channels.first().id) },
+            player.commands,
+        )
+    }
+
+    @Test
+    fun `switching cancels pending playback and closing keeps the latest channel focused`() = runTest {
+        val player = FakePlayerManager().apply { suspendPlayback = true }
+        val viewModel = TvIptvViewModel(BundledIptvRepository { channels }, player)
+        runCurrent()
+        viewModel.play(channels.first())
+        runCurrent()
+        viewModel.nextChannel()
+        runCurrent()
+        assertTrue(player.playbackCancelled)
+        assertEquals(channels.last(), viewModel.state.value.playingChannel)
+        assertEquals<List<MediaCommand>>(
+            listOf(1, 2).map(MediaCommand::Common),
+            player.commands,
+        )
+        viewModel.previousChannel()
+        viewModel.nextChannel()
+        runCurrent()
+        assertEquals(channels.last(), viewModel.state.value.playingChannel)
+        viewModel.closePlayer()
+        runCurrent()
+        assertNull(viewModel.state.value.playingChannel)
+        assertEquals(channels.last().id, viewModel.state.value.focusedChannelId)
+        assertFalse(player.isPlaying.value)
+        assertFalse(viewModel.state.value.playbackStartFailed)
+    }
+
+    @Test
     fun `closing playback releases it and returns to the same list and channel`() = runTest {
         val player = FakePlayerManager()
         val viewModel = TvIptvViewModel(BundledIptvRepository { channels }, player)
