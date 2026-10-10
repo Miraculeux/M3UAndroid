@@ -106,12 +106,17 @@ present. Before working with the excluded files, fetch the full working tree wit
 
 The TV app imports its channels from
 [`app/tv/src/main/assets/iptv.m3u`](app/tv/src/main/assets/iptv.m3u) (1080P preferred)
-or [`app/tv/src/main/assets/iptv-4k.m3u`](app/tv/src/main/assets/iptv-4k.m3u)
-(4K preferred). Each bundled
+or [`app/tv/src/main/assets/iptv-4k-low.m3u`](app/tv/src/main/assets/iptv-4k-low.m3u)
+(4K low bitrate), or
+[`app/tv/src/main/assets/iptv-4k.m3u`](app/tv/src/main/assets/iptv-4k.m3u)
+(4K high bitrate). Each bundled
 snapshot contains 150 unique channel names, curated from the 191 entries in the
 local `Iptv.m3u`. Each name retains one source, preferring a source that produced
 decoded media frames and then the selected resolution preference.
-Equal-resolution sources retain their original order. CCTV1–CCTV17
+Duplicate sources were retested locally for time to first media, transfer gaps,
+TS continuity, resolution, frame rate, and decoded frames. Within each bitrate
+tier, cleaner transport is preferred; inconclusive ties retain original order.
+CCTV1–CCTV17
 occupy channel numbers 1–17; CCTV5+, the other central channels, provincial
 satellite channels, and the remaining local/specialty/radio channels follow.
 Numbers are the one-based bundled playlist positions, not database IDs, and
@@ -138,16 +143,24 @@ and actually restarts the last played channel, not merely the focused grid card.
 The grid is not shown while restoring. Configuration recreation is excluded:
 it preserves the existing player or grid and does not undo an intentional pause.
 
-The button at the top right switches between **1080P preferred** (the default)
-and **4K preferred**, with the choice saved in the existing Settings DataStore
-under the TV-only `tv_iptv_prefer_4k` key. Each launch reads this setting before
+The button at the top right cycles through **1080P preferred** (the default),
+**4K low bitrate**, and **4K high bitrate**, with the choice saved in the existing
+Settings DataStore under the TV-only `tv_iptv_quality` key. Each launch reads this setting before
 importing the appropriate list. No separate APK or build flag is required.
 1080P preferred selects the highest verified resolution at or below 1920×1080;
-4K preferred selects a verified 3840-wide-or-higher source when available.
+Both 4K modes select a verified 3840-wide-or-higher source when available.
+Low bitrate selects the lower-bandwidth tier, usually 25fps and around 30 Mbps
+for the provincial satellite channels. High bitrate selects the higher tier,
+usually 50fps and around 38–40 Mbps. These are curated source tiers, not
+transcoding or bandwidth limits. Lower bitrate can reduce bandwidth pressure
+but is not a guarantee of smooth playback, and 25fps has less fluid motion than
+50fps. Existing `tv_iptv_prefer_4k=true` preferences map to high bitrate;
+false or absent preferences map to 1080P. Saving a new choice removes the legacy
+key. Unknown stored values surface a load error rather than silently resetting.
 If the preferred resolution is unavailable, both modes retain the best verified
 alternative, including a 4K exception in 1080P mode, rather than losing channels.
 This is source selection, not transcoding or a limit on decoder output.
-Both lists contain the same 150 names and channel numbers. Switching cancels
+All three lists contain the same 150 names and channel numbers. Switching cancels
 pending numeric input, reloads the list without autoplay, and restores the
 previously focused channel by name even when its database ID changes. Loading
 or saving errors show the retry UI and do not report the preference as changed.
@@ -156,9 +169,27 @@ The button is available only on the grid, not during playback.
 Current probe evidence confirms separate 1080P/4K choices for CCTV16, 江苏卫视,
 and 四川卫视. 湖南卫视 and several other satellite channels only had verified
 4K sources; their other original addresses timed out. They therefore use the
-same verified 4K source in both modes until working lower-resolution sources
-are supplied. The 1080P-preferred list has eight such 4K channels; the
-4K-preferred list has eleven.
+low-bitrate 4K source in 1080P mode until working lower-resolution sources
+are supplied. The 1080P-preferred list has eight such 4K channels; each
+4K list has eleven. Some channels, such as CCTV16, have only one verified
+4K source and therefore use the same source in both 4K modes.
+
+Zhejiang satellite (channel 23) now uses `239.49.1.63:8000` in 1080P and
+4K-low modes: verified 3840×2160 HEVC, 25fps, approximately 30 Mbps.
+4K-high explicitly selects `239.49.1.64:8000`: 3840×2160 HEVC, 50fps,
+approximately 38 Mbps. Across 20s, 12s, and 30s samples, the low source had
+no TS continuity errors; the high source had 117, 50, and 109 respectively.
+The `239.49.8.139:6000` candidate still returned no media.
+The 2026-10-10 retest covered 30 duplicate channel names and 71 candidate URLs:
+all were sampled for 20s with up to two test streams and again serially for
+12s (unavailable addresses terminated earlier); 32 playable competing sources
+were confirmed serially for 30s. Captured media was decoded locally. Concurrent
+4K streams degraded some results, so source selection uses serial measurements.
+TS continuity errors are a transport indicator, not a literal dropped-frame
+count; decoder startup warnings before the first keyframe are not proof of
+ongoing corruption. These samples do not certify TV hardware or long-term
+stability. CCTV1, CCTV5, CCTV13, and other duplicates also use updated sources
+where the serial measurements favor them.
 
 During playback, Back or the player's Close button opens the DPad-focused
 four-column grid. Press OK/Select on a channel to start playback. Back or the
@@ -220,7 +251,7 @@ Build the optimized TV release:
 ```
 
 The APK is written to
-`app/tv/build/outputs/published-apk/release/tv-1.0.11.apk`. The current release
+`app/tv/build/outputs/published-apk/release/tv-1.0.12.apk`. The current release
 configuration uses the existing debug signing key; it is not a production
 signing setup.
 
@@ -360,6 +391,18 @@ both boundaries, hidden controls, screen-awake cleanup, and unchanged grid
 movement. The optimized release was also checked for Up 1→2, Down 2→1,
 Down 1→150, and Up 150→1 with correct grid focus on return. Signature/ZIP
 alignment checks passed and the crash buffer was empty.
+
+TV 1.0.12 adds the three persisted source tiers and updated duplicate sources.
+All 65 TV unit tests and four targeted Android 9 instrumentation tests passed,
+including DPad cycling through all three modes, actual CCTV1 playback after
+relaunch, legacy preference migration, startup resume, and channel switching.
+The optimized APK passed signature and 16KB ZIP-alignment checks. Release
+Zhejiang requests were observed for the low source in HD/low modes and the
+high source after a force-stop/relaunch with the high preference saved.
+The Android 9 emulator's software decoder exhausted its 48MB Java heap on the
+4K-high HEVC stream and displayed a playback error; sustained high-tier
+playback is not certified by this emulator. No app crash was recorded.
+Verify both tiers on the target TV hardware.
 
 ## License
 

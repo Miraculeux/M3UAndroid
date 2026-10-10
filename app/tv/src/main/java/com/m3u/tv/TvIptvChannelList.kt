@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import com.m3u.data.database.model.Channel
+import com.m3u.data.repository.playlist.IptvQuality
 import com.m3u.i18n.R.plurals
 import com.m3u.i18n.R.string
 
@@ -47,7 +48,7 @@ fun TvIptvChannelList(
     onFocus: (Channel) -> Unit,
     onPlay: (Channel) -> Unit,
     onRetry: () -> Unit,
-    onPrefer4k: (Boolean) -> Unit,
+    onQuality: (IptvQuality) -> Unit,
 ) {
     val initialFocusRequester = remember { FocusRequester() }
     val inputModeManager = LocalInputModeManager.current
@@ -93,10 +94,14 @@ fun TvIptvChannelList(
             }
             TvActionButton(
                 text = stringResource(
-                    if (state.prefer4k) string.tv_iptv_quality_4k else string.tv_iptv_quality_1080p
+                    when (state.quality) {
+                        IptvQuality.HD -> string.tv_iptv_quality_1080p
+                        IptvQuality.UHD_LOW -> string.tv_iptv_quality_4k_low
+                        IptvQuality.UHD_HIGH -> string.tv_iptv_quality_4k_high
+                    }
                 ),
                 icon = Icons.Rounded.Tv,
-                onClick = { onPrefer4k(!state.prefer4k) },
+                onClick = { onQuality(state.quality.next()) },
                 enabled = !state.loading,
             )
         }

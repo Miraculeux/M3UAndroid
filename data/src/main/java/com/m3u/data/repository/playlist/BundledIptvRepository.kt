@@ -18,9 +18,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 interface BundledIptvRepository {
-    suspend fun load(prefer4k: Boolean): List<Channel>
-    suspend fun getPrefer4k(): Boolean
-    suspend fun setPrefer4k(value: Boolean)
+    suspend fun load(quality: IptvQuality): List<Channel>
+    suspend fun getQuality(): IptvQuality
+    suspend fun setQuality(value: IptvQuality)
     suspend fun getLastChannelTitle(): String?
     suspend fun setLastChannelTitle(value: String)
 }
@@ -33,12 +33,19 @@ internal class BundledIptvRepositoryImpl @Inject constructor(
 ) : BundledIptvRepository {
     private val loadMutex = Mutex()
     private val prefer4kKey = booleanPreferencesKey("tv_iptv_prefer_4k")
+    private val qualityKey = stringPreferencesKey("tv_iptv_quality")
     private val lastChannelKey = stringPreferencesKey("tv_iptv_last_channel_title")
 
-    override suspend fun getPrefer4k(): Boolean = settings.data.first()[prefer4kKey] ?: false
+    override suspend fun getQuality(): IptvQuality {
+        val preferences = settings.data.first()
+        return IptvQuality.fromPreference(preferences[qualityKey], preferences[prefer4kKey] ?: false)
+    }
 
-    override suspend fun setPrefer4k(value: Boolean) {
-        settings.edit { it[prefer4kKey] = value }
+    override suspend fun setQuality(value: IptvQuality) {
+        settings.edit {
+            it[qualityKey] = value.preferenceValue
+            it.remove(prefer4kKey)
+        }
     }
 
     override suspend fun getLastChannelTitle(): String? = settings.data.first()[lastChannelKey]
@@ -47,10 +54,10 @@ internal class BundledIptvRepositoryImpl @Inject constructor(
         settings.edit { it[lastChannelKey] = value }
     }
 
-    override suspend fun load(prefer4k: Boolean): List<Channel> = withContext(Dispatchers.IO) {
+    override suspend fun load(quality: IptvQuality): List<Channel> = withContext(Dispatchers.IO) {
         loadMutex.withLock {
             val file = File(context.filesDir, "bundled-iptv.m3u")
-            context.assets.open(if (prefer4k) "iptv-4k.m3u" else "iptv.m3u").use { input ->
+            context.assets.open(quality.assetName).use { input ->
                 file.outputStream().use { output -> input.copyTo(output) }
             }
             val url = Uri.fromFile(file).toString()

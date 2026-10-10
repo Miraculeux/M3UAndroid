@@ -10,6 +10,7 @@ import androidx.media3.common.Tracks
 import com.m3u.data.database.model.Channel
 import com.m3u.data.database.model.Playlist
 import com.m3u.data.repository.playlist.BundledIptvRepository
+import com.m3u.data.repository.playlist.IptvQuality
 import com.m3u.data.service.MediaCommand
 import com.m3u.data.service.PlayerManager
 import java.io.IOException
@@ -380,29 +381,29 @@ class TvIptvViewModelTest {
         val player = FakePlayerManager()
         val first = startOnGrid(repository, player)
         runCurrent()
-        assertFalse(first.state.value.prefer4k)
-        assertEquals(listOf(false), repository.loadedModes)
+        assertEquals(IptvQuality.HD, first.state.value.quality)
+        assertEquals(listOf(IptvQuality.HD), repository.loadedModes)
         first.focusChannel(channels[1])
-        first.setPrefer4k(true)
+        first.setQuality(IptvQuality.UHD_HIGH)
         runCurrent()
-        assertTrue(first.state.value.prefer4k)
-        assertTrue(repository.savedPrefer4k)
+        assertEquals(IptvQuality.UHD_HIGH, first.state.value.quality)
+        assertEquals(IptvQuality.UHD_HIGH, repository.savedQuality)
         assertEquals(channels[1].id + 100, first.state.value.focusedChannelId)
-        assertEquals(listOf(false, true), repository.loadedModes)
+        assertEquals(listOf(IptvQuality.HD, IptvQuality.UHD_HIGH), repository.loadedModes)
         assertTrue(player.commands.isEmpty())
 
         val restarted = TvIptvViewModel(repository, player)
         runCurrent()
-        assertTrue(restarted.state.value.prefer4k)
+        assertEquals(IptvQuality.UHD_HIGH, restarted.state.value.quality)
         assertEquals(channels[0].id + 100, restarted.state.value.channels.first().id)
         restarted.enterChannelDigit(2)
         restarted.confirmChannelNumber()
         runCurrent()
         assertEquals(channels[1].id + 100, restarted.state.value.playingChannel?.id)
         restarted.closePlayer()
-        restarted.setPrefer4k(false)
+        restarted.setQuality(IptvQuality.HD)
         runCurrent()
-        assertFalse(repository.savedPrefer4k)
+        assertEquals(IptvQuality.HD, repository.savedQuality)
         assertEquals(channels[1].id, restarted.state.value.focusedChannelId)
     }
 
@@ -415,12 +416,12 @@ class TvIptvViewModelTest {
             }
             val viewModel = startOnGrid(repository, FakePlayerManager())
             runCurrent()
-            viewModel.setPrefer4k(true)
+            viewModel.setQuality(IptvQuality.UHD_HIGH)
             runCurrent()
             assertTrue(viewModel.state.value.loadFailed)
             assertFalse(viewModel.state.value.loading)
-            assertFalse(viewModel.state.value.prefer4k)
-            assertFalse(repository.savedPrefer4k)
+            assertEquals(IptvQuality.HD, viewModel.state.value.quality)
+            assertEquals(IptvQuality.HD, repository.savedQuality)
             viewModel.loadPlaylist()
             runCurrent()
             assertFalse(viewModel.state.value.loadFailed)
@@ -435,29 +436,29 @@ class TvIptvViewModelTest {
         val viewModel = startOnGrid(repository, player)
         runCurrent()
         viewModel.enterChannelDigit(2)
-        viewModel.setPrefer4k(true)
+        viewModel.setQuality(IptvQuality.UHD_HIGH)
         advanceTimeBy(2_000)
         runCurrent()
         assertEquals("", viewModel.state.value.channelNumberInput)
         assertTrue(player.commands.isEmpty())
         viewModel.play(viewModel.state.value.channels.first())
         runCurrent()
-        viewModel.setPrefer4k(false)
+        viewModel.setQuality(IptvQuality.HD)
         runCurrent()
-        assertTrue(viewModel.state.value.prefer4k)
-        assertEquals(listOf(false, true), repository.loadedModes)
+        assertEquals(IptvQuality.UHD_HIGH, viewModel.state.value.quality)
+        assertEquals(listOf(IptvQuality.HD, IptvQuality.UHD_HIGH), repository.loadedModes)
     }
 
     @Test
     fun `startup restores the last channel by name using the saved quality source`() = runTest {
         val repository = FakeBundledIptvRepository { channels }.apply {
-            savedPrefer4k = true
+            savedQuality = IptvQuality.UHD_HIGH
             savedChannelTitle = "CCTV2"
         }
         val player = FakePlayerManager()
         val viewModel = TvIptvViewModel(repository, player)
         runCurrent()
-        assertTrue(viewModel.state.value.prefer4k)
+        assertEquals(IptvQuality.UHD_HIGH, viewModel.state.value.quality)
         assertEquals("CCTV2", viewModel.state.value.playingChannel?.title)
         assertEquals(102, viewModel.state.value.playingChannel?.id)
         assertEquals(channels[1].url + "/4k", viewModel.state.value.playingChannel?.url)
@@ -582,7 +583,7 @@ class TvIptvViewModelTest {
     fun `backgrounding pauses resources and returning restores the saved quality source`() = runTest {
         val repository = FakeBundledIptvRepository { channels }.apply {
             savedChannelTitle = "CCTV2"
-            savedPrefer4k = true
+            savedQuality = IptvQuality.UHD_HIGH
         }
         val player = FakePlayerManager()
         val viewModel = TvIptvViewModel(repository, player)
@@ -596,7 +597,7 @@ class TvIptvViewModelTest {
         assertEquals(102, viewModel.state.value.playingChannel?.id)
         assertTrue(player.isPlaying.value)
         assertEquals<List<MediaCommand>>(listOf(102, 102).map(MediaCommand::Common), player.commands)
-        assertEquals(listOf(true, true), repository.loadedModes)
+        assertEquals(listOf(IptvQuality.UHD_HIGH, IptvQuality.UHD_HIGH), repository.loadedModes)
     }
 
     @Test
@@ -668,8 +669,10 @@ class TvIptvViewModelTest {
                 .bufferedReader().use { reader -> reader.readLines() }
         val hd = playlist("iptv.m3u")
         val uhd = playlist("iptv-4k.m3u")
+        val low = playlist("iptv-4k-low.m3u")
         val metadata = { lines: List<String> -> lines.filter { it.startsWith("#EXTINF:") } }
         assertEquals(metadata(hd), metadata(uhd))
+        assertEquals(metadata(hd), metadata(low))
         assertEquals(150, metadata(hd).size)
         fun url(lines: List<String>, title: String): String =
             lines[lines.indexOfFirst { it.endsWith(",$title") } + 1]
@@ -678,9 +681,18 @@ class TvIptvViewModelTest {
         for (title in listOf("江苏卫视", "四川卫视")) {
             assertFalse(url(hd, title) == url(uhd, title))
         }
-        for (title in listOf("CCTV1", "CCTV13", "CCTV4K", "湖南卫视")) {
+        for (title in listOf("CCTV1", "CCTV13", "CCTV4K")) {
             assertEquals(url(hd, title), url(uhd, title))
         }
+        for (lines in listOf(hd, low)) {
+            assertEquals("http://192.168.50.11:8888/rtp/239.49.1.63:8000", url(lines, "浙江卫视"))
+        }
+        assertEquals("http://192.168.50.11:8888/rtp/239.49.1.64:8000", url(uhd, "浙江卫视"))
+        assertEquals("http://192.168.50.11:8888/rtp/239.49.1.61:8000", url(low, "江苏卫视"))
+        assertEquals("http://192.168.50.11:8888/rtp/239.49.1.62:8000", url(uhd, "江苏卫视"))
+        assertEquals("http://192.168.50.11:8888/rtp/239.49.8.19:9614", url(hd, "CCTV1"))
+        assertEquals("http://192.168.50.11:8888/rtp/239.49.8.75:8000", url(hd, "CCTV5"))
+        assertEquals("http://192.168.50.11:8888/rtp/239.49.8.109:8000", url(hd, "CCTV13"))
     }
 
     @Test
@@ -704,6 +716,68 @@ class TvIptvViewModelTest {
         assertEquals("江苏健康广播", titles.last())
     }
 
+    @Test
+    fun `all three qualities persist and restore actual channel selection on startup and warm return`() = runTest {
+        for (quality in IptvQuality.entries) {
+            val repository = FakeBundledIptvRepository { channels }
+            val player = FakePlayerManager()
+            val first = startOnGrid(repository, player)
+            first.focusChannel(channels[1])
+            first.setQuality(quality)
+            runCurrent()
+            assertEquals(quality, first.state.value.quality)
+            assertEquals(quality, repository.savedQuality)
+            val selected = first.state.value.channels[1]
+            assertEquals(selected.id, first.state.value.focusedChannelId)
+            assertNull(first.state.value.playingChannel)
+            first.play(selected)
+            runCurrent()
+            val restarted = TvIptvViewModel(repository, player)
+            runCurrent()
+            assertEquals(quality, restarted.state.value.quality)
+            assertEquals(selected, restarted.state.value.playingChannel)
+            restarted.onAppStopped(changingConfigurations = false)
+            restarted.onAppStarted()
+            runCurrent()
+            assertEquals(selected, restarted.state.value.playingChannel)
+            assertTrue(player.isPlaying.value)
+        }
+    }
+
+    @Test
+    fun `quality cycle and persisted legacy preferences preserve upgrade behavior`() {
+        assertEquals(IptvQuality.UHD_LOW, IptvQuality.HD.next())
+        assertEquals(IptvQuality.UHD_HIGH, IptvQuality.UHD_LOW.next())
+        assertEquals(IptvQuality.HD, IptvQuality.UHD_HIGH.next())
+        assertEquals(IptvQuality.HD, IptvQuality.fromPreference(null, false))
+        assertEquals(IptvQuality.UHD_HIGH, IptvQuality.fromPreference(null, true))
+        for (quality in IptvQuality.entries) {
+            assertEquals(quality, IptvQuality.fromPreference(quality.preferenceValue, false))
+            assertEquals(quality, IptvQuality.fromPreference(quality.preferenceValue, true))
+        }
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun `unknown stored quality reports an error instead of silently resetting`() {
+        IptvQuality.fromPreference("invalid", true)
+    }
+
+    @Test
+    fun `low bitrate quality load and save errors leave the stored choice unchanged`() = runTest {
+        for (failLoading in listOf(true, false)) {
+            val repository = FakeBundledIptvRepository { channels }.apply {
+                fail4kLoading = failLoading
+                failSaving = !failLoading
+            }
+            val viewModel = startOnGrid(repository, FakePlayerManager())
+            viewModel.setQuality(IptvQuality.UHD_LOW)
+            runCurrent()
+            assertTrue(viewModel.state.value.loadFailed)
+            assertEquals(IptvQuality.HD, viewModel.state.value.quality)
+            assertEquals(IptvQuality.HD, repository.savedQuality)
+        }
+    }
+
     private fun TestScope.startOnGrid(
         repository: BundledIptvRepository,
         player: FakePlayerManager,
@@ -721,28 +795,32 @@ class TvIptvViewModelTest {
     private class FakeBundledIptvRepository(
         private val channels: suspend () -> List<Channel>,
     ) : BundledIptvRepository {
-        var savedPrefer4k = false
+        var savedQuality = IptvQuality.HD
         var failSaving = false
         var fail4kLoading = false
         var savedChannelTitle: String? = null
         var failReadingChannel = false
         var failSavingChannel = false
         var saveChannelGate: CompletableDeferred<Unit>? = null
-        val loadedModes = mutableListOf<Boolean>()
+        val loadedModes = mutableListOf<IptvQuality>()
 
-        override suspend fun load(prefer4k: Boolean): List<Channel> {
-            loadedModes += prefer4k
-            if (prefer4k && fail4kLoading) throw IOException("4K playlist unavailable")
+        override suspend fun load(quality: IptvQuality): List<Channel> {
+            loadedModes += quality
+            if (quality != IptvQuality.HD && fail4kLoading) throw IOException("4K playlist unavailable")
             return channels().map { channel ->
-                if (prefer4k) channel.copy(id = channel.id + 100, url = channel.url + "/4k") else channel
+                when (quality) {
+                    IptvQuality.HD -> channel
+                    IptvQuality.UHD_LOW -> channel.copy(id = channel.id + 200, url = channel.url + "/4k-low")
+                    IptvQuality.UHD_HIGH -> channel.copy(id = channel.id + 100, url = channel.url + "/4k")
+                }
             }
         }
 
-        override suspend fun getPrefer4k(): Boolean = savedPrefer4k
+        override suspend fun getQuality(): IptvQuality = savedQuality
 
-        override suspend fun setPrefer4k(value: Boolean) {
+        override suspend fun setQuality(value: IptvQuality) {
             if (failSaving) throw IOException("Preference storage unavailable")
-            savedPrefer4k = value
+            savedQuality = value
         }
 
         override suspend fun getLastChannelTitle(): String? {

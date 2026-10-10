@@ -23,8 +23,10 @@ import com.m3u.tv.MainActivity
 import com.m3u.tv.TvPlayerScreen
 import com.m3u.tv.TvIptvViewModel
 import com.m3u.data.database.model.Channel
+import com.m3u.data.repository.playlist.IptvQuality
 import com.m3u.core.foundation.architecture.preferences.settings
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -370,48 +372,87 @@ class TvIptvNavigationTest {
 
     @Test
     fun qualitySwitchIsDpadAccessibleAndPersistsAcrossActivityLaunches() {
-        val hdLabel = context.getString(string.tv_iptv_quality_1080p)
-        val uhdLabel = context.getString(string.tv_iptv_quality_4k)
+        val labels = listOf(
+            string.tv_iptv_quality_1080p,
+            string.tv_iptv_quality_4k_low,
+            string.tv_iptv_quality_4k_high,
+        ).map(context::getString)
+        runBlocking {
+            context.settings.edit {
+                it[stringPreferencesKey("tv_iptv_quality")] = IptvQuality.HD.preferenceValue
+            }
+        }
         try {
-            launchOnGrid().use {
-                waitForChannelFocus(index = 1)
-                if (device.hasObject(By.desc(uhdLabel))) {
-                    device.findObject(By.desc(uhdLabel)).click()
+            for (quality in IptvQuality.entries) {
+                val next = quality.next()
+                launchOnGrid().use {
+                    waitForChannelFocus(index = 1)
+                    assertTrue(device.hasObject(By.desc(labels[quality.ordinal])))
+                    assertTrue(device.pressDPadUp())
+                    refreshAccessibilityCache()
+                    assertTrue(device.wait(Until.hasObject(By.desc(labels[quality.ordinal]).focused(true)), timeout))
+                    assertTrue(device.pressDPadCenter())
+                    assertTrue(device.wait(Until.hasObject(By.desc(labels[next.ordinal])), timeout))
                     waitForChannelFocus(index = 1)
                 }
-                assertTrue(device.hasObject(By.desc(hdLabel)))
-                assertTrue(device.pressDPadUp())
-                refreshAccessibilityCache()
-                assertTrue(device.wait(Until.hasObject(By.desc(hdLabel).focused(true)), timeout))
-                assertTrue(device.pressDPadCenter())
-                assertTrue(device.wait(Until.hasObject(By.desc(uhdLabel)), timeout))
-                waitForChannelFocus(index = 1)
-            }
-            launchOnGrid().use { scenario ->
-                waitForChannelFocus(index = 1)
-                assertTrue(device.hasObject(By.desc(uhdLabel)))
-                scenario.recreate()
-                waitForChannelFocus(index = 1)
-                assertTrue(device.hasObject(By.desc(uhdLabel)))
-                device.executeShellCommand("input keyevent 8 13 23")
-                val closeLabel = context.getString(string.tv_action_close_player)
-                assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
-                assertTrue(device.pressBack())
-                waitForChannelFocus(index = 16)
-                device.findObject(By.desc(uhdLabel)).click()
-                assertTrue(device.wait(Until.hasObject(By.desc(hdLabel)), timeout))
-                waitForChannelFocus(index = 16)
-            }
-            launchOnGrid().use {
-                waitForChannelFocus(index = 1)
-                assertTrue(device.hasObject(By.desc(hdLabel)))
+                ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                    assertActualPlayback(scenario, title = "CCTV1")
+                    scenario.onActivity { activity ->
+                        val viewModel = ViewModelProvider(activity)[TvIptvViewModel::class.java]
+                        assertEquals(next, viewModel.state.value.quality)
+                    }
+                    assertTrue(device.pressBack())
+                    waitForChannelFocus(index = 1)
+                    assertTrue(device.hasObject(By.desc(labels[next.ordinal])))
+                    scenario.recreate()
+                    waitForChannelFocus(index = 1)
+                    assertTrue(device.hasObject(By.desc(labels[next.ordinal])))
+                }
             }
         } finally {
-            launchOnGrid().use {
-                waitForChannelFocus(index = 1)
-                if (device.hasObject(By.desc(uhdLabel))) {
-                    device.findObject(By.desc(uhdLabel)).click()
-                    waitForChannelFocus(index = 1)
+            runBlocking {
+                context.settings.edit {
+                    it[stringPreferencesKey("tv_iptv_quality")] = IptvQuality.HD.preferenceValue
+                }
+            }
+        }
+    }
+
+    @Test
+    fun legacyQualityMigratesToHighBitrateAndNewChoiceOverridesIt() {
+        try {
+            for (legacy in listOf(false, true)) {
+                runBlocking {
+                    context.settings.edit {
+                        it.remove(stringPreferencesKey("tv_iptv_quality"))
+                        it[booleanPreferencesKey("tv_iptv_prefer_4k")] = legacy
+                    }
+                }
+                launchOnGrid().use { scenario ->
+                    scenario.onActivity { activity ->
+                        val viewModel = ViewModelProvider(activity)[TvIptvViewModel::class.java]
+                        assertEquals(if (legacy) IptvQuality.UHD_HIGH else IptvQuality.HD, viewModel.state.value.quality)
+                        viewModel.setQuality(IptvQuality.UHD_LOW)
+                    }
+                    val lowLabel = context.getString(string.tv_iptv_quality_4k_low)
+                    assertTrue(device.wait(Until.hasObject(By.desc(lowLabel)), timeout))
+                    runBlocking {
+                        val preferences = context.settings.data.first()
+                        assertEquals(IptvQuality.UHD_LOW.preferenceValue, preferences[stringPreferencesKey("tv_iptv_quality")])
+                        assertFalse(preferences.contains(booleanPreferencesKey("tv_iptv_prefer_4k")))
+                    }
+                }
+                launchOnGrid().use { scenario ->
+                    scenario.onActivity { activity ->
+                        assertEquals(IptvQuality.UHD_LOW, ViewModelProvider(activity)[TvIptvViewModel::class.java].state.value.quality)
+                    }
+                }
+            }
+        } finally {
+            runBlocking {
+                context.settings.edit {
+                    it[stringPreferencesKey("tv_iptv_quality")] = IptvQuality.HD.preferenceValue
+                    it.remove(booleanPreferencesKey("tv_iptv_prefer_4k"))
                 }
             }
         }
@@ -422,6 +463,7 @@ class TvIptvNavigationTest {
         runBlocking {
             context.settings.edit {
                 it.remove(stringPreferencesKey("tv_iptv_last_channel_title"))
+                it.remove(stringPreferencesKey("tv_iptv_quality"))
                 it[booleanPreferencesKey("tv_iptv_prefer_4k")] = false
             }
         }

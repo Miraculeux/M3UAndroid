@@ -125,7 +125,7 @@ fun App(viewModel: TvIptvViewModel = hiltViewModel()) {
                 onFocus = viewModel::focusChannel,
                 onPlay = viewModel::play,
                 onRetry = viewModel::loadPlaylist,
-                onPrefer4k = viewModel::setPrefer4k,
+                onQuality = viewModel::setQuality,
             )
         }
         BackHandler(enabled = state.channelNumberInput.isNotEmpty()) {

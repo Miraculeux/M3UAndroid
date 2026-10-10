@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.m3u.data.database.model.Channel
 import com.m3u.data.repository.playlist.BundledIptvRepository
+import com.m3u.data.repository.playlist.IptvQuality
 import com.m3u.data.service.MediaCommand
 import com.m3u.data.service.PlayerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -26,7 +27,7 @@ data class TvIptvUiState(
     val loading: Boolean = true,
     val loadFailed: Boolean = false,
     val restoringPlayback: Boolean = false,
-    val prefer4k: Boolean = false,
+    val quality: IptvQuality = IptvQuality.HD,
     val focusedChannelId: Int? = null,
     val playingChannel: Channel? = null,
     val playbackStartFailed: Boolean = false,
@@ -87,19 +88,19 @@ class TvIptvViewModel @Inject constructor(
         loadPlaylist(null)
     }
 
-    fun setPrefer4k(value: Boolean) {
+    fun setQuality(value: IptvQuality) {
         val state = _state.value
-        if (state.loading || state.playingChannel != null || state.prefer4k == value) return
+        if (state.loading || state.playingChannel != null || state.quality == value) return
         loadPlaylist(value)
     }
 
-    private fun loadPlaylist(requestedPrefer4k: Boolean?) {
+    private fun loadPlaylist(requestedQuality: IptvQuality?) {
         cancelChannelNumber()
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             _state.update { it.copy(loading = true, loadFailed = false) }
             try {
-                val prefer4k = requestedPrefer4k ?: bundledIptvRepository.getPrefer4k()
+                val quality = requestedQuality ?: bundledIptvRepository.getQuality()
                 val lastChannelTitle = if (startupPlaybackPending) {
                     bundledIptvRepository.getLastChannelTitle()
                 } else {
@@ -107,9 +108,9 @@ class TvIptvViewModel @Inject constructor(
                 }
                 val previousTitle = _state.value.channels
                     .firstOrNull { it.id == _state.value.focusedChannelId }?.title
-                val channels = bundledIptvRepository.load(prefer4k)
+                val channels = bundledIptvRepository.load(quality)
                 check(channels.isNotEmpty()) { "The bundled IPTV playlist has no channels" }
-                if (requestedPrefer4k != null) bundledIptvRepository.setPrefer4k(prefer4k)
+                if (requestedQuality != null) bundledIptvRepository.setQuality(quality)
                 val startupChannel = if (startupPlaybackPending) {
                     channels.firstOrNull { it.title == lastChannelTitle } ?: channels.first().also {
                         if (lastChannelTitle != null) {
@@ -127,7 +128,7 @@ class TvIptvViewModel @Inject constructor(
                         channels = channels,
                         loading = false,
                         restoringPlayback = false,
-                        prefer4k = prefer4k,
+                        quality = quality,
                         focusedChannelId = channels.firstOrNull { channel -> channel.title == previousTitle }?.id,
                         playingChannel = startupChannel ?: it.playingChannel,
                     )
