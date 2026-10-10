@@ -7,6 +7,9 @@ import android.view.ViewGroup
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.Lifecycle
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.media3.common.Player
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
@@ -18,6 +21,8 @@ import com.m3u.i18n.R.string
 import com.m3u.tv.MainActivity
 import com.m3u.tv.TvPlayerScreen
 import com.m3u.data.database.model.Channel
+import com.m3u.core.foundation.architecture.preferences.settings
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -30,9 +35,9 @@ class TvIptvNavigationTest {
     private val timeout = 15_000L
 
     @Test
-    fun startupImportsAllChannelsWithoutDuplicatingThemOnRelaunch() {
+    fun returningToGridShowsAllChannelsWithoutDuplicatingThemOnRelaunch() {
         repeat(2) {
-            ActivityScenario.launch(MainActivity::class.java).use {
+            launchOnGrid().use {
                 waitForChannelFocus(index = 1)
                 val count = context.resources.getQuantityString(plurals.tv_channel_count, 150, 150)
                 assertTrue(device.hasObject(By.text(count)))
@@ -41,8 +46,8 @@ class TvIptvNavigationTest {
     }
 
     @Test
-    fun startupShowsOnlyTheChannelListWithInitialDpadFocus() {
-        ActivityScenario.launch(MainActivity::class.java).use {
+    fun returningToGridShowsOnlyChannelsWithInitialDpadFocus() {
+        launchOnGrid().use {
             waitForChannelFocus(index = 1)
             val count = context.resources.getQuantityString(plurals.tv_channel_count, 150, 150)
             assertTrue(device.hasObject(By.text(count)))
@@ -60,7 +65,7 @@ class TvIptvNavigationTest {
 
     @Test
     fun playingThenBackOrCloseReturnsFocusToTheSelectedChannel() {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        launchOnGrid().use {
             waitForChannelFocus(index = 1)
             assertTrue(device.pressDPadRight())
             waitForChannelFocus(index = 2)
@@ -82,7 +87,7 @@ class TvIptvNavigationTest {
 
     @Test
     fun gridHasFourColumnsWithHorizontalAndVerticalDpadNavigation() {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        launchOnGrid().use {
             waitForChannelFocus(index = 1)
             val cards = (1..4).map { index ->
                 val title = "CCTV$index"
@@ -112,7 +117,7 @@ class TvIptvNavigationTest {
 
     @Test
     fun playerUpDownSwitchChannelsAndRestoreTheLatestGridFocus() {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        launchOnGrid().use {
             waitForChannelFocus(index = 1)
             val closeLabel = context.getString(string.tv_action_close_player)
             assertTrue(device.pressDPadCenter())
@@ -141,7 +146,7 @@ class TvIptvNavigationTest {
 
     @Test
     fun playerKeepsScreenAwakeWhileSwitchingAndRestoresItOnBackOrClose() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        launchOnGrid().use { scenario ->
             waitForChannelFocus(index = 1)
             assertScreenKeptAwake(scenario, expected = false)
             val closeLabel = context.getString(string.tv_action_close_player)
@@ -167,7 +172,7 @@ class TvIptvNavigationTest {
 
     @Test
     fun playerKeepsScreenAwakeAcrossActivityRecreation() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        launchOnGrid().use { scenario ->
             waitForChannelFocus(index = 1)
             val closeLabel = context.getString(string.tv_action_close_player)
             assertTrue(device.pressDPadCenter())
@@ -186,7 +191,7 @@ class TvIptvNavigationTest {
 
     @Test
     fun controlsHideAfterThreeSecondsAndRemoteInputStillWorks() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        launchOnGrid().use { scenario ->
             val playing = mutableStateOf(false)
             var pauseClicks = 0
             var previousClicks = 0
@@ -243,7 +248,7 @@ class TvIptvNavigationTest {
 
     @Test
     fun pausedBufferingAndErrorStatesKeepControlsVisible() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        launchOnGrid().use { scenario ->
             val playing = mutableStateOf(true)
             val playbackState = mutableStateOf(Player.STATE_READY)
             val error = mutableStateOf<String?>(null)
@@ -284,7 +289,7 @@ class TvIptvNavigationTest {
 
     @Test
     fun playerWrapsAndBackScrollsToAnOffscreenChannel() {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        launchOnGrid().use {
             waitForChannelFocus(index = 1)
             val closeLabel = context.getString(string.tv_action_close_player)
             assertTrue(device.pressDPadCenter())
@@ -303,7 +308,7 @@ class TvIptvNavigationTest {
 
     @Test
     fun numericInputFromGridDebouncesAndReturnsToCctv13() {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        launchOnGrid().use {
             waitForChannelFocus(index = 1)
             device.executeShellCommand("input keyevent 8 10")
             val pending = context.getString(string.tv_iptv_number_input, "13")
@@ -317,7 +322,7 @@ class TvIptvNavigationTest {
 
     @Test
     fun numpadAndOkSelectImmediatelyWithoutAnExtraPause() {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        launchOnGrid().use {
             waitForChannelFocus(index = 1)
             val started = SystemClock.uptimeMillis()
             device.executeShellCommand("input keyevent 145 147 23")
@@ -331,7 +336,7 @@ class TvIptvNavigationTest {
 
     @Test
     fun playerNumericInputSupportsCancelInvalidNumberAndSwitching() {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        launchOnGrid().use {
             waitForChannelFocus(index = 1)
             val closeLabel = context.getString(string.tv_action_close_player)
             assertTrue(device.pressDPadCenter())
@@ -359,7 +364,7 @@ class TvIptvNavigationTest {
         val hdLabel = context.getString(string.tv_iptv_quality_1080p)
         val uhdLabel = context.getString(string.tv_iptv_quality_4k)
         try {
-            ActivityScenario.launch(MainActivity::class.java).use {
+            launchOnGrid().use {
                 waitForChannelFocus(index = 1)
                 if (device.hasObject(By.desc(uhdLabel))) {
                     device.findObject(By.desc(uhdLabel)).click()
@@ -373,7 +378,7 @@ class TvIptvNavigationTest {
                 assertTrue(device.wait(Until.hasObject(By.desc(uhdLabel)), timeout))
                 waitForChannelFocus(index = 1)
             }
-            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            launchOnGrid().use { scenario ->
                 waitForChannelFocus(index = 1)
                 assertTrue(device.hasObject(By.desc(uhdLabel)))
                 scenario.recreate()
@@ -388,12 +393,12 @@ class TvIptvNavigationTest {
                 assertTrue(device.wait(Until.hasObject(By.desc(hdLabel)), timeout))
                 waitForChannelFocus(index = 16)
             }
-            ActivityScenario.launch(MainActivity::class.java).use {
+            launchOnGrid().use {
                 waitForChannelFocus(index = 1)
                 assertTrue(device.hasObject(By.desc(hdLabel)))
             }
         } finally {
-            ActivityScenario.launch(MainActivity::class.java).use {
+            launchOnGrid().use {
                 waitForChannelFocus(index = 1)
                 if (device.hasObject(By.desc(uhdLabel))) {
                     device.findObject(By.desc(uhdLabel)).click()
@@ -404,8 +409,39 @@ class TvIptvNavigationTest {
     }
 
     @Test
-    fun stoppingActivityCancelsPendingNumericSelection() {
+    fun startupAutoplaysFirstChannelThenRestoresLastChannelWithoutShowingGrid() {
+        runBlocking {
+            context.settings.edit {
+                it.remove(stringPreferencesKey("tv_iptv_last_channel_title"))
+                it[booleanPreferencesKey("tv_iptv_prefer_4k")] = false
+            }
+        }
+        val closeLabel = context.getString(string.tv_action_close_player)
+        val count = context.resources.getQuantityString(plurals.tv_channel_count, 150, 150)
+        ActivityScenario.launch(MainActivity::class.java).use {
+            assertTrue(device.wait(Until.hasObject(By.text("CCTV1")), timeout))
+            assertFalse(device.hasObject(By.text(count)))
+            device.executeShellCommand("input keyevent 8 10 23")
+            assertTrue(device.wait(Until.hasObject(By.text("CCTV13")), timeout))
+            assertFalse(device.hasObject(By.text(count)))
+            assertTrue(device.pressBack())
+            waitForChannelFocus(index = 13)
+        }
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            assertTrue(device.wait(Until.hasObject(By.text("CCTV13")), timeout))
+            assertFalse(device.hasObject(By.text(count)))
+            assertScreenKeptAwake(scenario, expected = true)
+            scenario.recreate()
+            assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
+            assertFalse(device.hasObject(By.text(count)))
+            device.findObject(By.desc(closeLabel)).click()
+            waitForChannelFocus(index = 13)
+        }
+    }
+
+    @Test
+    fun stoppingActivityCancelsPendingNumericSelection() {
+        launchOnGrid().use { scenario ->
             waitForChannelFocus(index = 1)
             device.executeShellCommand("input keyevent 9")
             scenario.moveToState(Lifecycle.State.CREATED)
@@ -413,6 +449,22 @@ class TvIptvNavigationTest {
             scenario.moveToState(Lifecycle.State.RESUMED)
             waitForChannelFocus(index = 1)
             assertFalse(device.hasObject(By.desc(context.getString(string.tv_action_close_player))))
+        }
+    }
+
+    private fun launchOnGrid(): ActivityScenario<MainActivity> {
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            val closeLabel = context.getString(string.tv_action_close_player)
+            assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
+            device.executeShellCommand("input keyevent 8 23")
+            assertTrue(device.wait(Until.hasObject(By.text("CCTV1")), timeout))
+            assertTrue(device.pressBack())
+            waitForChannelFocus(index = 1)
+            return scenario
+        } catch (error: Throwable) {
+            scenario.close()
+            throw error
         }
     }
 

@@ -58,6 +58,7 @@ class TvIptvViewModel @Inject constructor(
     private var loadJob: Job? = null
     private var playJob: Job? = null
     private var numberSelectionJob: Job? = null
+    private var startupPlaybackPending = true
 
     init {
         loadPlaylist()
@@ -80,17 +81,40 @@ class TvIptvViewModel @Inject constructor(
             _state.update { it.copy(loading = true, loadFailed = false) }
             try {
                 val prefer4k = requestedPrefer4k ?: bundledIptvRepository.getPrefer4k()
+                val lastChannelTitle = if (startupPlaybackPending) {
+                    bundledIptvRepository.getLastChannelTitle()
+                } else {
+                    null
+                }
                 val previousTitle = _state.value.channels
                     .firstOrNull { it.id == _state.value.focusedChannelId }?.title
                 val channels = bundledIptvRepository.load(prefer4k)
+                check(channels.isNotEmpty()) { "The bundled IPTV playlist has no channels" }
                 if (requestedPrefer4k != null) bundledIptvRepository.setPrefer4k(prefer4k)
+                val startupChannel = if (startupPlaybackPending) {
+                    channels.firstOrNull { it.title == lastChannelTitle } ?: channels.first().also {
+                        if (lastChannelTitle != null) {
+                            Timber.tag("TvIptvViewModel").i(
+                                "Saved IPTV channel %s is unavailable; starting the first channel",
+                                lastChannelTitle,
+                            )
+                        }
+                    }
+                } else {
+                    null
+                }
                 _state.update {
                     it.copy(
                         channels = channels,
                         loading = false,
                         prefer4k = prefer4k,
                         focusedChannelId = channels.firstOrNull { channel -> channel.title == previousTitle }?.id,
+                        playingChannel = startupChannel ?: it.playingChannel,
                     )
+                }
+                if (startupChannel != null) {
+                    startupPlaybackPending = false
+                    play(startupChannel)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -116,6 +140,7 @@ class TvIptvViewModel @Inject constructor(
         _state.update { it.openPlayer(channel) }
         playJob = viewModelScope.launch {
             try {
+                bundledIptvRepository.setLastChannelTitle(channel.title)
                 playerManager.play(MediaCommand.Common(channel.id), applyContinueWatching = false)
             } catch (cancelled: CancellationException) {
                 throw cancelled

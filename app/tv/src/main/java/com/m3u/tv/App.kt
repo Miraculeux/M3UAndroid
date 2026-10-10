@@ -89,7 +89,14 @@ fun App(viewModel: TvIptvViewModel = hiltViewModel()) {
                 }
             },
     ) {
-        if (state.playingChannel != null) {
+        if (state.loading && state.channels.isEmpty()) {
+            Text(
+                text = stringResource(string.ui_state_loading),
+                color = TvColors.TextSecondary,
+                fontSize = 24.sp,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        } else if (state.playingChannel != null) {
             TvPlayerScreen(
                 player = player,
                 channel = state.playingChannel,

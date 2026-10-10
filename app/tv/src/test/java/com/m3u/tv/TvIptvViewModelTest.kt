@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -54,7 +55,7 @@ class TvIptvViewModelTest {
     }
 
     @Test
-    fun `startup automatically loads the bundled list without starting playback`() = runTest {
+    fun `startup waits for import then automatically plays CCTV1 when no channel is saved`() = runTest {
         val importedChannels = CompletableDeferred<List<Channel>>()
         val player = FakePlayerManager()
         val viewModel = TvIptvViewModel(FakeBundledIptvRepository { importedChannels.await() }, player)
@@ -68,13 +69,14 @@ class TvIptvViewModelTest {
         assertEquals(channels, viewModel.state.value.channels)
         assertFalse(viewModel.state.value.loading)
         assertFalse(viewModel.state.value.loadFailed)
-        assertNull(viewModel.state.value.playingChannel)
+        assertEquals(channels.first(), viewModel.state.value.playingChannel)
+        assertEquals<List<MediaCommand>>(listOf(MediaCommand.Common(1)), player.commands)
     }
 
     @Test
     fun `selecting a channel opens and starts that live stream`() = runTest {
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         runCurrent()
         viewModel.play(channels[1])
         runCurrent()
@@ -89,7 +91,7 @@ class TvIptvViewModelTest {
     fun `up and down switch by playlist order rather than channel id`() = runTest {
         val entries = listOf(channels[0].copy(id = 40), channels[1].copy(id = 7), channels[0].copy(id = 91))
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { entries }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { entries }, player)
         runCurrent()
         viewModel.play(entries[0])
         runCurrent()
@@ -114,7 +116,7 @@ class TvIptvViewModelTest {
     @Test
     fun `channel switching wraps between the first and last entries`() = runTest {
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         runCurrent()
         viewModel.play(channels.first())
         runCurrent()
@@ -133,7 +135,7 @@ class TvIptvViewModelTest {
     @Test
     fun `channel switching does not autoplay while the list is open`() = runTest {
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         viewModel.previousChannel()
         viewModel.nextChannel()
         runCurrent()
@@ -147,7 +149,7 @@ class TvIptvViewModelTest {
     @Test
     fun `a single channel wraps safely to itself`() = runTest {
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels.take(1) }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels.take(1) }, player)
         runCurrent()
         viewModel.play(channels.first())
         runCurrent()
@@ -165,7 +167,7 @@ class TvIptvViewModelTest {
     @Test
     fun `switching cancels pending playback and closing keeps the latest channel focused`() = runTest {
         val player = FakePlayerManager().apply { suspendPlayback = true }
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         runCurrent()
         viewModel.play(channels.first())
         runCurrent()
@@ -192,7 +194,7 @@ class TvIptvViewModelTest {
     @Test
     fun `closing playback releases it and returns to the same list and channel`() = runTest {
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         runCurrent()
         viewModel.play(channels[1])
         runCurrent()
@@ -208,7 +210,7 @@ class TvIptvViewModelTest {
     @Test
     fun `back cancels pending playback so it cannot restart behind the list`() = runTest {
         val player = FakePlayerManager().apply { suspendPlayback = true }
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         runCurrent()
         viewModel.play(channels[0])
         runCurrent()
@@ -245,7 +247,7 @@ class TvIptvViewModelTest {
     @Test
     fun `destroying the view model stops playback`() = runTest {
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         val store = ViewModelStore().apply { put("iptv", viewModel) }
         runCurrent()
         viewModel.play(channels[0])
@@ -260,7 +262,7 @@ class TvIptvViewModelTest {
     fun `numeric selection waits 1500 milliseconds and uses list position not database id`() = runTest {
         val entries = (1..17).map { channels.first().copy(title = "CCTV$it", id = 100 + it) }
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { entries }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { entries }, player)
         runCurrent()
         viewModel.enterChannelDigit(1)
         advanceTimeBy(1_000)
@@ -279,7 +281,7 @@ class TvIptvViewModelTest {
     @Test
     fun `OK confirms immediately and cancels the delayed selection`() = runTest {
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         runCurrent()
         viewModel.enterChannelDigit(2)
         viewModel.confirmChannelNumber()
@@ -293,7 +295,7 @@ class TvIptvViewModelTest {
     @Test
     fun `cancel prevents a numeric jump without closing current playback`() = runTest {
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         runCurrent()
         viewModel.play(channels[0])
         runCurrent()
@@ -310,7 +312,7 @@ class TvIptvViewModelTest {
     @Test
     fun `invalid numbers show feedback without interrupting playback and allow retry`() = runTest {
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         runCurrent()
         viewModel.play(channels[0])
         runCurrent()
@@ -335,7 +337,7 @@ class TvIptvViewModelTest {
     @Test
     fun `leading zeros are accepted and excess digits are rejected without overflow`() = runTest {
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         runCurrent()
         viewModel.enterChannelDigit(0)
         viewModel.enterChannelDigit(2)
@@ -354,7 +356,7 @@ class TvIptvViewModelTest {
     @Test
     fun `Dpad switching and leaving playback cancel pending numeric selection`() = runTest {
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { channels }, player)
+        val viewModel = startOnGrid(FakeBundledIptvRepository { channels }, player)
         runCurrent()
         viewModel.play(channels[0])
         runCurrent()
@@ -376,7 +378,7 @@ class TvIptvViewModelTest {
     fun `quality defaults to 1080p and persisted 4k selection loads before playback`() = runTest {
         val repository = FakeBundledIptvRepository { channels }
         val player = FakePlayerManager()
-        val first = TvIptvViewModel(repository, player)
+        val first = startOnGrid(repository, player)
         runCurrent()
         assertFalse(first.state.value.prefer4k)
         assertEquals(listOf(false), repository.loadedModes)
@@ -411,7 +413,7 @@ class TvIptvViewModelTest {
                 fail4kLoading = failLoading
                 failSaving = !failLoading
             }
-            val viewModel = TvIptvViewModel(repository, FakePlayerManager())
+            val viewModel = startOnGrid(repository, FakePlayerManager())
             runCurrent()
             viewModel.setPrefer4k(true)
             runCurrent()
@@ -430,7 +432,7 @@ class TvIptvViewModelTest {
     fun `quality change cancels pending numbers and cannot reimport while playing`() = runTest {
         val repository = FakeBundledIptvRepository { channels }
         val player = FakePlayerManager()
-        val viewModel = TvIptvViewModel(repository, player)
+        val viewModel = startOnGrid(repository, player)
         runCurrent()
         viewModel.enterChannelDigit(2)
         viewModel.setPrefer4k(true)
@@ -444,6 +446,111 @@ class TvIptvViewModelTest {
         runCurrent()
         assertTrue(viewModel.state.value.prefer4k)
         assertEquals(listOf(false, true), repository.loadedModes)
+    }
+
+    @Test
+    fun `startup restores the last channel by name using the saved quality source`() = runTest {
+        val repository = FakeBundledIptvRepository { channels }.apply {
+            savedPrefer4k = true
+            savedChannelTitle = "CCTV2"
+        }
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        assertTrue(viewModel.state.value.prefer4k)
+        assertEquals("CCTV2", viewModel.state.value.playingChannel?.title)
+        assertEquals(102, viewModel.state.value.playingChannel?.id)
+        assertEquals(channels[1].url + "/4k", viewModel.state.value.playingChannel?.url)
+        assertEquals<List<MediaCommand>>(listOf(MediaCommand.Common(102)), player.commands)
+        assertFalse(player.appliedContinueWatching)
+    }
+
+    @Test
+    fun `a removed saved channel falls back to the first channel and replaces the saved title`() = runTest {
+        val repository = FakeBundledIptvRepository { channels }.apply {
+            savedChannelTitle = "Removed channel"
+        }
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        assertEquals(channels.first(), viewModel.state.value.playingChannel)
+        assertEquals("CCTV1", repository.savedChannelTitle)
+        assertEquals<List<MediaCommand>>(listOf(MediaCommand.Common(1)), player.commands)
+    }
+
+    @Test
+    fun `closing and reloading the grid do not autoplay or replace the last played channel with focus`() = runTest {
+        val repository = FakeBundledIptvRepository { channels }
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        viewModel.enterChannelDigit(2)
+        viewModel.confirmChannelNumber()
+        runCurrent()
+        assertEquals("CCTV2", repository.savedChannelTitle)
+        viewModel.closePlayer()
+        viewModel.focusChannel(channels.first())
+        viewModel.loadPlaylist()
+        runCurrent()
+        assertNull(viewModel.state.value.playingChannel)
+        assertEquals("CCTV2", repository.savedChannelTitle)
+        assertEquals(2, player.commands.size)
+        val restarted = TvIptvViewModel(repository, FakePlayerManager())
+        runCurrent()
+        assertEquals(channels[1], restarted.state.value.playingChannel)
+    }
+
+    @Test
+    fun `startup storage read failures are visible and retry still restores the channel`() = runTest {
+        val repository = FakeBundledIptvRepository { channels }.apply {
+            savedChannelTitle = "CCTV2"
+            failReadingChannel = true
+        }
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        assertTrue(viewModel.state.value.loadFailed)
+        assertNull(viewModel.state.value.playingChannel)
+        assertTrue(player.commands.isEmpty())
+        repository.failReadingChannel = false
+        viewModel.loadPlaylist()
+        runCurrent()
+        assertEquals(channels[1], viewModel.state.value.playingChannel)
+        assertEquals<List<MediaCommand>>(listOf(MediaCommand.Common(2)), player.commands)
+    }
+
+    @Test
+    fun `saving the last channel fails explicitly instead of silently losing the selection`() = runTest {
+        val repository = FakeBundledIptvRepository { channels }.apply { failSavingChannel = true }
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        assertTrue(viewModel.state.value.playbackStartFailed)
+        assertEquals(channels.first(), viewModel.state.value.playingChannel)
+        assertTrue(player.commands.isEmpty())
+        repository.failSavingChannel = false
+        viewModel.play(channels.first())
+        runCurrent()
+        assertFalse(viewModel.state.value.playbackStartFailed)
+        assertEquals("CCTV1", repository.savedChannelTitle)
+        assertEquals<List<MediaCommand>>(listOf(MediaCommand.Common(1)), player.commands)
+    }
+
+    @Test
+    fun `Back during startup persistence prevents delayed autoplay behind the grid`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val repository = FakeBundledIptvRepository { channels }.apply { saveChannelGate = gate }
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        assertEquals(channels.first(), viewModel.state.value.playingChannel)
+        assertTrue(player.commands.isEmpty())
+        viewModel.closePlayer()
+        gate.complete(Unit)
+        runCurrent()
+        assertNull(viewModel.state.value.playingChannel)
+        assertTrue(player.commands.isEmpty())
+        assertNull(repository.savedChannelTitle)
     }
 
     @Test
@@ -489,12 +596,30 @@ class TvIptvViewModelTest {
         assertEquals("江苏健康广播", titles.last())
     }
 
+    private fun TestScope.startOnGrid(
+        repository: BundledIptvRepository,
+        player: FakePlayerManager,
+    ): TvIptvViewModel {
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        viewModel.closePlayer()
+        runCurrent()
+        player.commands.clear()
+        player.releaseCount = 0
+        player.playbackCancelled = false
+        return viewModel
+    }
+
     private class FakeBundledIptvRepository(
         private val channels: suspend () -> List<Channel>,
     ) : BundledIptvRepository {
         var savedPrefer4k = false
         var failSaving = false
         var fail4kLoading = false
+        var savedChannelTitle: String? = null
+        var failReadingChannel = false
+        var failSavingChannel = false
+        var saveChannelGate: CompletableDeferred<Unit>? = null
         val loadedModes = mutableListOf<Boolean>()
 
         override suspend fun load(prefer4k: Boolean): List<Channel> {
@@ -510,6 +635,17 @@ class TvIptvViewModelTest {
         override suspend fun setPrefer4k(value: Boolean) {
             if (failSaving) throw IOException("Preference storage unavailable")
             savedPrefer4k = value
+        }
+
+        override suspend fun getLastChannelTitle(): String? {
+            if (failReadingChannel) throw IOException("Last channel storage unavailable")
+            return savedChannelTitle
+        }
+
+        override suspend fun setLastChannelTitle(value: String) {
+            saveChannelGate?.await()
+            if (failSavingChannel) throw IOException("Last channel could not be saved")
+            savedChannelTitle = value
         }
     }
 

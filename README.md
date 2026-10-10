@@ -104,7 +104,7 @@ present. Before working with the excluded files, fetch the full working tree wit
 
 ## Simplified IPTV TV build
 
-The TV app starts directly in a DPad-focused four-column channel grid imported from
+The TV app imports its channels from
 [`app/tv/src/main/assets/iptv.m3u`](app/tv/src/main/assets/iptv.m3u) (1080P preferred)
 or [`app/tv/src/main/assets/iptv-4k.m3u`](app/tv/src/main/assets/iptv-4k.m3u)
 (4K preferred). Each bundled
@@ -118,6 +118,18 @@ Numbers are the one-based bundled playlist positions, not database IDs, and
 are displayed prominently on every grid card. No playlist URL, import action, favorites menu,
 settings page, extension setup, or phone pairing is exposed in this TV UI.
 The phone app is unchanged.
+
+On launch, the app reads the saved quality preference and last played channel,
+then goes directly to live playback without displaying the channel grid. A
+neutral loading screen appears while importing. First launch, or a saved
+channel no longer present in the list, automatically plays the first channel
+(CCTV1). The last selected channel is saved in the existing Settings DataStore
+under `tv_iptv_last_channel_title` whenever playback starts, including numeric
+and Up/Down switching. It is matched by channel name, not database ID or source
+URL, so changing resolution does not change the resumed channel. Merely moving
+grid focus does not change the saved channel. Startup import/read failures show
+the retry UI; retry still performs startup playback. Playback errors remain
+visible rather than silently selecting another channel.
 
 The button at the top right switches between **1080P preferred** (the default)
 and **4K preferred**, with the choice saved in the existing Settings DataStore
@@ -141,7 +153,8 @@ same verified 4K source in both modes until working lower-resolution sources
 are supplied. The 1080P-preferred list has eight such 4K channels; the
 4K-preferred list has eleven.
 
-Press the remote's OK/Select button on a channel to start playback. Back or the
+During playback, Back or the player's Close button opens the DPad-focused
+four-column grid. Press OK/Select on a channel to start playback. Back or the
 player's Close button stops playback and returns to the same list, restoring
 the selected channel's focus and retaining list scroll state. Loading errors
 show a retry action, and stream errors remain visible in the player.
@@ -200,7 +213,7 @@ Build the optimized TV release:
 ```
 
 The APK is written to
-`app/tv/build/outputs/published-apk/release/tv-1.0.8.apk`. The current release
+`app/tv/build/outputs/published-apk/release/tv-1.0.9.apk`. The current release
 configuration uses the existing debug signing key; it is not a production
 signing setup.
 
@@ -217,7 +230,8 @@ pointer click on the player's Close button.
 
 When changing R8 rules or Netty dependencies, test the actual release APK on
 Android 9 (API 28) as well as a newer Android TV device/emulator. Check the
-bundled-channel startup list, DPad selection, playback, Back/Close focus restoration,
+startup autoplay, the bundled-channel list after Back, DPad selection,
+playback, Back/Close focus restoration,
 and repeated cold starts. Debug-only tests cannot detect this release regression.
 An ARM64 Android 9 AOSP emulator checks OS compatibility, not Zidoo's Realtek
 hardware or vendor firmware.
@@ -292,6 +306,20 @@ hid its controls and kept the screen awake, and the crash buffer was empty.
 Signature/ZIP alignment checks passed and both packaged playlists match their
 source assets. No new dependencies or database schema changes are required.
 Sony XR-55X91J and Zidoo Z9X hardware remain unverified.
+
+TV 1.0.9 starts playback automatically using the last played channel and saved
+quality mode, falling back to CCTV1 only when no matching channel is saved.
+All 56 TV unit tests and all 16 Android 9 navigation/lifecycle tests passed,
+including first launch, last-channel restoration without a grid, storage
+read/write errors, startup retry, cancellation before delayed playback,
+and all existing grid, numeric, quality, control-visibility, and screen-awake
+behavior. The optimized release was exercised with actual CCTV13 playback after
+force-stop/relaunch and Back restoring channel 13 focus. Changing the saved
+quality to 4K then relaunching resumed CCTV16 via `239.49.0.109:8000`; reverting
+to 1080P resumed the same channel via `239.49.8.31:8000`. Merely changing quality
+on the grid did not autoplay. `KEEP_SCREEN_ON` remained active, the crash buffer
+was empty, signature/ZIP alignment checks passed, and both M3U assets were
+unchanged. Sony and Zidoo hardware remain unverified.
 
 ## License
 

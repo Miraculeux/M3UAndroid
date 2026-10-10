@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.m3u.core.foundation.architecture.preferences.Settings
 import com.m3u.data.database.model.Channel
 import com.m3u.data.repository.channel.ChannelRepository
@@ -20,6 +21,8 @@ interface BundledIptvRepository {
     suspend fun load(prefer4k: Boolean): List<Channel>
     suspend fun getPrefer4k(): Boolean
     suspend fun setPrefer4k(value: Boolean)
+    suspend fun getLastChannelTitle(): String?
+    suspend fun setLastChannelTitle(value: String)
 }
 
 internal class BundledIptvRepositoryImpl @Inject constructor(
@@ -30,11 +33,18 @@ internal class BundledIptvRepositoryImpl @Inject constructor(
 ) : BundledIptvRepository {
     private val loadMutex = Mutex()
     private val prefer4kKey = booleanPreferencesKey("tv_iptv_prefer_4k")
+    private val lastChannelKey = stringPreferencesKey("tv_iptv_last_channel_title")
 
     override suspend fun getPrefer4k(): Boolean = settings.data.first()[prefer4kKey] ?: false
 
     override suspend fun setPrefer4k(value: Boolean) {
         settings.edit { it[prefer4kKey] = value }
+    }
+
+    override suspend fun getLastChannelTitle(): String? = settings.data.first()[lastChannelKey]
+
+    override suspend fun setLastChannelTitle(value: String) {
+        settings.edit { it[lastChannelKey] = value }
     }
 
     override suspend fun load(prefer4k: Boolean): List<Channel> = withContext(Dispatchers.IO) {
