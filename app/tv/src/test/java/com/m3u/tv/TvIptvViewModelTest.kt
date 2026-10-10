@@ -88,7 +88,7 @@ class TvIptvViewModelTest {
     }
 
     @Test
-    fun `up and down switch by playlist order rather than channel id`() = runTest {
+    fun `previous and next switch by playlist order rather than channel id`() = runTest {
         val entries = listOf(channels[0].copy(id = 40), channels[1].copy(id = 7), channels[0].copy(id = 91))
         val player = FakePlayerManager()
         val viewModel = startOnGrid(FakeBundledIptvRepository { entries }, player)
@@ -551,6 +551,114 @@ class TvIptvViewModelTest {
         assertNull(viewModel.state.value.playingChannel)
         assertTrue(player.commands.isEmpty())
         assertNull(repository.savedChannelTitle)
+    }
+
+    @Test
+    fun `returning to the same ViewModel autoplays the last played channel not the grid focus`() = runTest {
+        val repository = FakeBundledIptvRepository { channels }
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        viewModel.play(channels[1])
+        runCurrent()
+        viewModel.closePlayer()
+        viewModel.focusChannel(channels.first())
+        viewModel.onAppStopped(changingConfigurations = false)
+        val releases = player.releaseCount
+        viewModel.onAppStarted()
+        assertTrue(viewModel.state.value.restoringPlayback)
+        runCurrent()
+        assertEquals(channels[1], viewModel.state.value.playingChannel)
+        assertTrue(player.isPlaying.value)
+        assertFalse(viewModel.state.value.restoringPlayback)
+        assertEquals<List<MediaCommand>>(listOf(1, 2, 2).map(MediaCommand::Common), player.commands)
+        assertEquals(releases, player.releaseCount)
+        viewModel.onAppStarted()
+        runCurrent()
+        assertEquals(3, player.commands.size)
+    }
+
+    @Test
+    fun `backgrounding pauses resources and returning restores the saved quality source`() = runTest {
+        val repository = FakeBundledIptvRepository { channels }.apply {
+            savedChannelTitle = "CCTV2"
+            savedPrefer4k = true
+        }
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        viewModel.pauseOrContinue(false)
+        assertFalse(player.isPlaying.value)
+        viewModel.onAppStopped(changingConfigurations = false)
+        assertEquals(1, player.releaseCount)
+        viewModel.onAppStarted()
+        runCurrent()
+        assertEquals(102, viewModel.state.value.playingChannel?.id)
+        assertTrue(player.isPlaying.value)
+        assertEquals<List<MediaCommand>>(listOf(102, 102).map(MediaCommand::Common), player.commands)
+        assertEquals(listOf(true, true), repository.loadedModes)
+    }
+
+    @Test
+    fun `configuration recreation preserves pause and the grid without replaying`() = runTest {
+        val repository = FakeBundledIptvRepository { channels }
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        viewModel.pauseOrContinue(false)
+        viewModel.onAppStopped(changingConfigurations = true)
+        viewModel.onAppStarted()
+        runCurrent()
+        assertFalse(player.isPlaying.value)
+        assertEquals(0, player.releaseCount)
+        assertEquals(1, player.commands.size)
+        viewModel.closePlayer()
+        viewModel.onAppStopped(changingConfigurations = true)
+        viewModel.onAppStarted()
+        runCurrent()
+        assertNull(viewModel.state.value.playingChannel)
+        assertEquals(1, player.commands.size)
+    }
+
+    @Test
+    fun `stopping during import cancels background startup and restarts it on foreground`() = runTest {
+        val gate = CompletableDeferred<List<Channel>>()
+        val repository = FakeBundledIptvRepository { gate.await() }
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        viewModel.onAppStopped(changingConfigurations = false)
+        gate.complete(channels)
+        runCurrent()
+        assertTrue(player.commands.isEmpty())
+        viewModel.onAppStarted()
+        runCurrent()
+        assertEquals(channels.first(), viewModel.state.value.playingChannel)
+        assertTrue(player.isPlaying.value)
+        assertEquals<List<MediaCommand>>(listOf(MediaCommand.Common(1)), player.commands)
+    }
+
+    @Test
+    fun `warm restore read failure shows retry and retry still starts the saved channel`() = runTest {
+        val repository = FakeBundledIptvRepository { channels }
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(repository, player)
+        runCurrent()
+        viewModel.play(channels[1])
+        runCurrent()
+        repository.failReadingChannel = true
+        viewModel.onAppStopped(changingConfigurations = false)
+        viewModel.onAppStarted()
+        runCurrent()
+        assertTrue(viewModel.state.value.loadFailed)
+        assertNull(viewModel.state.value.playingChannel)
+        assertFalse(player.isPlaying.value)
+        assertEquals(2, player.commands.size)
+        repository.failReadingChannel = false
+        viewModel.loadPlaylist()
+        runCurrent()
+        assertEquals(channels[1], viewModel.state.value.playingChannel)
+        assertTrue(player.isPlaying.value)
     }
 
     @Test

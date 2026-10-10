@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -20,12 +21,14 @@ import com.m3u.i18n.R.plurals
 import com.m3u.i18n.R.string
 import com.m3u.tv.MainActivity
 import com.m3u.tv.TvPlayerScreen
+import com.m3u.tv.TvIptvViewModel
 import com.m3u.data.database.model.Channel
 import com.m3u.core.foundation.architecture.preferences.settings
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class TvIptvNavigationTest {
@@ -122,13 +125,13 @@ class TvIptvNavigationTest {
             val closeLabel = context.getString(string.tv_action_close_player)
             assertTrue(device.pressDPadCenter())
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
-            assertTrue(device.pressDPadDown())
+            assertTrue(device.pressDPadUp())
             assertTrue(device.pressBack())
             waitForChannelFocus(index = 2)
 
             assertTrue(device.pressDPadCenter())
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
-            assertTrue(device.pressDPadUp())
+            assertTrue(device.pressDPadDown())
             assertTrue(device.pressBack())
             waitForChannelFocus(index = 1)
 
@@ -138,7 +141,7 @@ class TvIptvNavigationTest {
             refreshAccessibilityCache()
             val closeFocused = device.wait(Until.hasObject(By.desc(closeLabel).focused(true)), timeout)
             assertTrue("Expected Close focus; actual: ${focusedLabels()}", closeFocused)
-            assertTrue(device.pressDPadDown())
+            assertTrue(device.pressDPadUp())
             device.findObject(By.desc(closeLabel)).click()
             waitForChannelFocus(index = 2)
         }
@@ -154,7 +157,7 @@ class TvIptvNavigationTest {
             assertTrue(device.pressDPadCenter())
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
             assertScreenKeptAwake(scenario, expected = true)
-            assertTrue(device.pressDPadDown())
+            assertTrue(device.pressDPadUp())
             assertScreenKeptAwake(scenario, expected = true)
 
             assertTrue(device.pressBack())
@@ -235,11 +238,17 @@ class TvIptvNavigationTest {
 
             assertTrue(device.pressDPadUp())
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
-            scenario.onActivity { assertEquals(1, previousClicks) }
+            scenario.onActivity {
+                assertEquals(1, nextClicks)
+                assertEquals(0, previousClicks)
+            }
             assertTrue(device.wait(Until.gone(By.desc(closeLabel)), 5_000))
             assertTrue(device.pressDPadDown())
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
-            scenario.onActivity { assertEquals(1, nextClicks) }
+            scenario.onActivity {
+                assertEquals(1, previousClicks)
+                assertEquals(1, nextClicks)
+            }
             assertTrue(device.wait(Until.gone(By.desc(closeLabel)), 5_000))
             device.pressBack()
             scenario.onActivity { assertEquals(1, backClicks) }
@@ -294,13 +303,13 @@ class TvIptvNavigationTest {
             val closeLabel = context.getString(string.tv_action_close_player)
             assertTrue(device.pressDPadCenter())
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
-            assertTrue(device.pressDPadUp())
+            assertTrue(device.pressDPadDown())
             assertTrue(device.pressBack())
             waitForChannelFocus(index = 150, title = "江苏健康广播", category = "广播")
 
             assertTrue(device.pressDPadCenter())
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
-            assertTrue(device.pressDPadDown())
+            assertTrue(device.pressDPadUp())
             assertTrue(device.pressBack())
             waitForChannelFocus(index = 1)
         }
@@ -432,10 +441,65 @@ class TvIptvNavigationTest {
             assertFalse(device.hasObject(By.text(count)))
             assertScreenKeptAwake(scenario, expected = true)
             scenario.recreate()
+            assertActualPlayback(scenario, title = "CCTV13")
+            scenario.onActivity { activity ->
+                ViewModelProvider(activity)[TvIptvViewModel::class.java].pauseOrContinue(false)
+            }
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
             assertFalse(device.hasObject(By.text(count)))
             device.findObject(By.desc(closeLabel)).click()
             waitForChannelFocus(index = 13)
+        }
+    }
+
+    @Test
+    fun returningFromBackgroundReusesViewModelButActuallyRestartsLastPlayback() {
+        launchOnGrid().use { scenario ->
+            device.executeShellCommand("input keyevent 8 10 23")
+            assertActualPlayback(scenario, title = "CCTV13")
+            device.pressBack()
+            waitForChannelFocus(index = 13)
+            assertTrue(device.pressDPadRight())
+            waitForChannelFocus(index = 14)
+            var originalViewModel: TvIptvViewModel? = null
+            scenario.onActivity { activity ->
+                originalViewModel = ViewModelProvider(activity)[TvIptvViewModel::class.java]
+            }
+            scenario.moveToState(Lifecycle.State.CREATED)
+            scenario.onActivity { activity ->
+                val viewModel = ViewModelProvider(activity)[TvIptvViewModel::class.java]
+                assertFalse(viewModel.isPlaying.value)
+                assertEquals(null, viewModel.player.value)
+            }
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            assertActualPlayback(scenario, title = "CCTV13")
+            scenario.onActivity { activity ->
+                assertSame(originalViewModel, ViewModelProvider(activity)[TvIptvViewModel::class.java])
+            }
+            val count = context.resources.getQuantityString(plurals.tv_channel_count, 150, 150)
+            assertFalse(device.hasObject(By.text(count)))
+            assertScreenKeptAwake(scenario, expected = true)
+            device.pressBack()
+            waitForChannelFocus(index = 13)
+        }
+    }
+
+    @Test
+    fun pausedPlaybackStaysPausedDuringConfigurationRecreation() {
+        launchOnGrid().use { scenario ->
+            assertTrue(device.pressDPadCenter())
+            assertActualPlayback(scenario, title = "CCTV1")
+            scenario.onActivity { activity ->
+                ViewModelProvider(activity)[TvIptvViewModel::class.java].pauseOrContinue(false)
+            }
+            scenario.recreate()
+            assertTrue(device.wait(Until.hasObject(By.desc(context.getString(string.tv_action_play))), timeout))
+            scenario.onActivity { activity ->
+                val viewModel = ViewModelProvider(activity)[TvIptvViewModel::class.java]
+                assertEquals("CCTV1", viewModel.state.value.playingChannel?.title)
+                assertFalse(viewModel.isPlaying.value)
+                assertFalse(checkNotNull(viewModel.player.value).playWhenReady)
+            }
         }
     }
 
@@ -447,8 +511,33 @@ class TvIptvNavigationTest {
             scenario.moveToState(Lifecycle.State.CREATED)
             SystemClock.sleep(1_700)
             scenario.moveToState(Lifecycle.State.RESUMED)
+            assertActualPlayback(scenario, title = "CCTV1")
+            device.pressBack()
             waitForChannelFocus(index = 1)
             assertFalse(device.hasObject(By.desc(context.getString(string.tv_action_close_player))))
+        }
+    }
+
+    private fun assertActualPlayback(scenario: ActivityScenario<MainActivity>, title: String) {
+        val deadline = SystemClock.uptimeMillis() + timeout
+        var playing = false
+        var position = 0L
+        while (!playing && SystemClock.uptimeMillis() < deadline) {
+            scenario.onActivity { activity ->
+                val viewModel = ViewModelProvider(activity)[TvIptvViewModel::class.java]
+                val player = viewModel.player.value
+                playing = viewModel.state.value.playingChannel?.title == title &&
+                    viewModel.isPlaying.value && player?.isPlaying == true
+                if (playing) position = checkNotNull(player).currentPosition
+            }
+            if (!playing) SystemClock.sleep(100)
+        }
+        assertTrue("Expected actual playback of $title, not just channel selection", playing)
+        SystemClock.sleep(1_000)
+        scenario.onActivity { activity ->
+            val player = checkNotNull(ViewModelProvider(activity)[TvIptvViewModel::class.java].player.value)
+            assertTrue(player.isPlaying)
+            assertTrue("Playback position must advance", player.currentPosition > position)
         }
     }
 

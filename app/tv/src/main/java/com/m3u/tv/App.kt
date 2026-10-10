@@ -2,6 +2,7 @@ package com.m3u.tv
 
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,9 +44,13 @@ fun App(viewModel: TvIptvViewModel = hiltViewModel()) {
     val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
     val playbackException by viewModel.playbackException.collectAsStateWithLifecycle()
     val listState = rememberLazyGridState()
+    val activity = LocalActivity.current
 
+    LifecycleEventEffect(Lifecycle.Event.ON_START) {
+        viewModel.onAppStarted()
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        viewModel.cancelChannelNumber()
+        viewModel.onAppStopped(changingConfigurations = activity?.isChangingConfigurations == true)
     }
 
     Box(
@@ -89,7 +94,7 @@ fun App(viewModel: TvIptvViewModel = hiltViewModel()) {
                 }
             },
     ) {
-        if (state.loading && state.channels.isEmpty()) {
+        if (state.loading && (state.channels.isEmpty() || state.restoringPlayback)) {
             Text(
                 text = stringResource(string.ui_state_loading),
                 color = TvColors.TextSecondary,

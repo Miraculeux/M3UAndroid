@@ -117,7 +117,7 @@ fun TvPlayerScreen(
                         if (event.type == KeyEventType.KeyUp) {
                             controlsVisible = true
                             interactionCount++
-                            if (event.key == Key.DirectionUp) onPreviousChannel() else onNextChannel()
+                            if (event.key == Key.DirectionUp) onNextChannel() else onPreviousChannel()
                         }
                         true
                     }

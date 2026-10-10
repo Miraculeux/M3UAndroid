@@ -130,6 +130,13 @@ URL, so changing resolution does not change the resumed channel. Merely moving
 grid focus does not change the saved channel. Startup import/read failures show
 the retry UI; retry still performs startup playback. Playback errors remain
 visible rather than silently selecting another channel.
+Returning from the launcher also restores playback when Android retains the
+same activity/ViewModel after Back exits the root task or Home backgrounds it.
+On a real background stop, pending import/play work is cancelled and the
+player is released. The next foreground start reloads the saved-quality list
+and actually restarts the last played channel, not merely the focused grid card.
+The grid is not shown while restoring. Configuration recreation is excluded:
+it preserves the existing player or grid and does not undo an intentional pause.
 
 The button at the top right switches between **1080P preferred** (the default)
 and **4K preferred**, with the choice saved in the existing Settings DataStore
@@ -159,8 +166,8 @@ player's Close button stops playback and returns to the same list, restoring
 the selected channel's focus and retaining list scroll state. Loading errors
 show a retry action, and stream errors remain visible in the player.
 In the grid, Left/Right move between columns and Up/Down move between rows.
-During playback, Up switches to the previous playlist entry and Down switches
-to the next entry, wrapping between the first and last entries. Back/Close restores
+During playback, Up increases the channel number by one and Down decreases it
+by one, wrapping between the first and last entries. Back/Close restores
 focus to the currently playing entry, scrolling the grid to it when necessary.
 During normal playback the floating controls disappear after three seconds
 without input. OK/Select or Left/Right reveals them without pausing playback;
@@ -213,7 +220,7 @@ Build the optimized TV release:
 ```
 
 The APK is written to
-`app/tv/build/outputs/published-apk/release/tv-1.0.9.apk`. The current release
+`app/tv/build/outputs/published-apk/release/tv-1.0.11.apk`. The current release
 configuration uses the existing debug signing key; it is not a production
 signing setup.
 
@@ -320,6 +327,39 @@ to 1080P resumed the same channel via `239.49.8.31:8000`. Merely changing qualit
 on the grid did not autoplay. `KEEP_SCREEN_ON` remained active, the crash buffer
 was empty, signature/ZIP alignment checks passed, and both M3U assets were
 unchanged. Sony and Zidoo hardware remain unverified.
+
+TV 1.0.10 fixes launcher re-entry when Android retains the activity/ViewModel.
+The old 1.0.9 release was reproduced in an unchanged process: returning from
+the launcher showed a grid focused on CCTV13 instead of starting playback.
+The fix handles real background stop/foreground start separately from
+configuration recreation, releases background playback resources, and restores
+the saved channel and resolution on re-entry. Import failures during restoration
+clear the stale player page and show the explicit retry UI.
+
+All 61 TV unit tests passed. All 18 Android 9 navigation cases have passing
+results across full-suite and targeted runs. The new warm-return test checks
+that the ViewModel is the same instance, the actual player reports `isPlaying`,
+and playback position advances; a separate test checks that configuration
+recreation preserves an intentional pause. A transient controls assertion in
+the startup test was stabilized by checking actual playback before inspecting
+the Close button.
+The optimized release was also checked with an unchanged process: after playing
+CCTV13 and moving grid focus to CCTV14, background/return restarted live CCTV13,
+not the focused card. Screenshots two seconds apart showed changing video,
+the proxy confirmed the saved source, Back restored channel 13 focus, and
+`KEEP_SCREEN_ON` remained active. The exact player Back → grid Back exit →
+launcher start sequence also resumed CCTV13. The crash buffer was empty,
+signature/ZIP alignment checks passed, and both playlists are unchanged.
+The Sony XR-55X91J still needs real-device confirmation of this fix.
+
+TV 1.0.11 reverses only the playback-page remote channel mapping: Up increases
+the channel number and Down decreases it, including when controls are hidden.
+Grid navigation and first/last wrapping are unchanged. All 61 TV unit tests
+and five targeted Android 9 navigation tests passed, covering both directions,
+both boundaries, hidden controls, screen-awake cleanup, and unchanged grid
+movement. The optimized release was also checked for Up 1→2, Down 2→1,
+Down 1→150, and Up 150→1 with correct grid focus on return. Signature/ZIP
+alignment checks passed and the crash buffer was empty.
 
 ## License
 

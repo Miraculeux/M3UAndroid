@@ -25,6 +25,7 @@ data class TvIptvUiState(
     val channels: List<Channel> = emptyList(),
     val loading: Boolean = true,
     val loadFailed: Boolean = false,
+    val restoringPlayback: Boolean = false,
     val prefer4k: Boolean = false,
     val focusedChannelId: Int? = null,
     val playingChannel: Channel? = null,
@@ -59,9 +60,27 @@ class TvIptvViewModel @Inject constructor(
     private var playJob: Job? = null
     private var numberSelectionJob: Job? = null
     private var startupPlaybackPending = true
+    private var resumePlaybackOnStart = false
 
     init {
         loadPlaylist()
+    }
+
+    fun onAppStarted() {
+        if (!resumePlaybackOnStart) return
+        resumePlaybackOnStart = false
+        startupPlaybackPending = true
+        _state.update { it.copy(loading = true, restoringPlayback = true) }
+        loadPlaylist()
+    }
+
+    fun onAppStopped(changingConfigurations: Boolean) {
+        cancelChannelNumber()
+        if (changingConfigurations) return
+        resumePlaybackOnStart = true
+        loadJob?.cancel()
+        playJob?.cancel()
+        playerManager.release()
     }
 
     fun loadPlaylist() {
@@ -107,6 +126,7 @@ class TvIptvViewModel @Inject constructor(
                     it.copy(
                         channels = channels,
                         loading = false,
+                        restoringPlayback = false,
                         prefer4k = prefer4k,
                         focusedChannelId = channels.firstOrNull { channel -> channel.title == previousTitle }?.id,
                         playingChannel = startupChannel ?: it.playingChannel,
@@ -242,7 +262,14 @@ class TvIptvViewModel @Inject constructor(
 
     private fun reportLoadFailure(error: Exception) {
         Timber.tag("TvIptvViewModel").e(error, "Unable to load the bundled IPTV playlist")
-        _state.update { it.copy(loading = false, loadFailed = true) }
+        _state.update {
+            it.copy(
+                loading = false,
+                loadFailed = true,
+                restoringPlayback = false,
+                playingChannel = null,
+            )
+        }
     }
 
     private fun reportPlaybackFailure(error: Exception) {
