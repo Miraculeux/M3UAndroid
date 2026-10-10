@@ -10,6 +10,11 @@
     <string name="tv_home_title">M3U TV</string>
     <string name="tv_iptv_title">IPTV channels</string>
     <string name="tv_iptv_channel_label">%1$d. %2$s · %3$s</string>
+    <string name="tv_iptv_number_input">Channel %1$s</string>
+    <string name="tv_iptv_number_hint">Wait 1.5 seconds or press OK to play; Back cancels.</string>
+    <string name="tv_iptv_number_invalid">Channel %1$s does not exist.</string>
+    <string name="tv_iptv_quality_1080p">1080P preferred</string>
+    <string name="tv_iptv_quality_4k">4K preferred</string>
     <string name="tv_iptv_load_failed">Unable to load the built-in IPTV playlist.</string>
     <string name="tv_iptv_playback_failed">Unable to play this channel. Check the Mac IPTV service and network connection.</string>
     <string name="tv_home_subtitle">A focused living-room player for playlists, channels, favorites, and quick resume.</string>

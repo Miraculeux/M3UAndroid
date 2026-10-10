@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -46,6 +47,7 @@ fun TvIptvChannelList(
     onFocus: (Channel) -> Unit,
     onPlay: (Channel) -> Unit,
     onRetry: () -> Unit,
+    onPrefer4k: (Boolean) -> Unit,
 ) {
     val initialFocusRequester = remember { FocusRequester() }
     val inputModeManager = LocalInputModeManager.current
@@ -74,14 +76,30 @@ fun TvIptvChannelList(
             .fillMaxSize()
             .padding(horizontal = 48.dp, vertical = 32.dp),
     ) {
-        SectionTitle(
-            title = stringResource(string.tv_iptv_title),
-            subtitle = pluralStringResource(
-                plurals.tv_channel_count,
-                state.channels.size,
-                state.channels.size,
-            ),
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Box(Modifier.weight(1f)) {
+                SectionTitle(
+                    title = stringResource(string.tv_iptv_title),
+                    subtitle = pluralStringResource(
+                        plurals.tv_channel_count,
+                        state.channels.size,
+                        state.channels.size,
+                    ),
+                )
+            }
+            TvActionButton(
+                text = stringResource(
+                    if (state.prefer4k) string.tv_iptv_quality_4k else string.tv_iptv_quality_1080p
+                ),
+                icon = Icons.Rounded.Tv,
+                onClick = { onPrefer4k(!state.prefer4k) },
+                enabled = !state.loading,
+            )
+        }
         when {
             state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -145,7 +163,8 @@ fun TvIptvChannelList(
                                 Text(
                                     text = (index + 1).toString(),
                                     color = textColor,
-                                    fontSize = 16.sp,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
                                     text = channel.title,

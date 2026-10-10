@@ -8,6 +8,11 @@
     <string name="ui_destination_setting">设置</string>
     <string name="tv_iptv_title">IPTV 频道列表</string>
     <string name="tv_iptv_channel_label">%1$d. %2$s · %3$s</string>
+    <string name="tv_iptv_number_input">频道 %1$s</string>
+    <string name="tv_iptv_number_hint">停顿 1.5 秒或按 OK 播放；返回取消。</string>
+    <string name="tv_iptv_number_invalid">频道 %1$s 不存在。</string>
+    <string name="tv_iptv_quality_1080p">1080P 优先</string>
+    <string name="tv_iptv_quality_4k">4K 优先</string>
     <string name="tv_iptv_load_failed">无法加载内置 IPTV 播放列表。</string>
     <string name="tv_iptv_playback_failed">无法播放此频道，请检查 Mac 上的 IPTV 服务和网络连接。</string>
     <string name="tv_extensions_subtitle">已安装的本地 APK 扩展及其信任状态。</string>

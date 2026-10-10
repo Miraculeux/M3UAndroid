@@ -13,6 +13,7 @@ import java.io.IOException
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -24,9 +25,12 @@ data class TvIptvUiState(
     val channels: List<Channel> = emptyList(),
     val loading: Boolean = true,
     val loadFailed: Boolean = false,
+    val prefer4k: Boolean = false,
     val focusedChannelId: Int? = null,
     val playingChannel: Channel? = null,
     val playbackStartFailed: Boolean = false,
+    val channelNumberInput: String = "",
+    val rejectedChannelNumber: String? = null,
 ) {
     fun openPlayer(channel: Channel): TvIptvUiState = copy(
         focusedChannelId = channel.id,
@@ -53,18 +57,41 @@ class TvIptvViewModel @Inject constructor(
     val playbackException = playerManager.playbackException
     private var loadJob: Job? = null
     private var playJob: Job? = null
+    private var numberSelectionJob: Job? = null
 
     init {
         loadPlaylist()
     }
 
     fun loadPlaylist() {
+        loadPlaylist(null)
+    }
+
+    fun setPrefer4k(value: Boolean) {
+        val state = _state.value
+        if (state.loading || state.playingChannel != null || state.prefer4k == value) return
+        loadPlaylist(value)
+    }
+
+    private fun loadPlaylist(requestedPrefer4k: Boolean?) {
+        cancelChannelNumber()
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             _state.update { it.copy(loading = true, loadFailed = false) }
             try {
-                val channels = bundledIptvRepository.load()
-                _state.update { it.copy(channels = channels, loading = false) }
+                val prefer4k = requestedPrefer4k ?: bundledIptvRepository.getPrefer4k()
+                val previousTitle = _state.value.channels
+                    .firstOrNull { it.id == _state.value.focusedChannelId }?.title
+                val channels = bundledIptvRepository.load(prefer4k)
+                if (requestedPrefer4k != null) bundledIptvRepository.setPrefer4k(prefer4k)
+                _state.update {
+                    it.copy(
+                        channels = channels,
+                        loading = false,
+                        prefer4k = prefer4k,
+                        focusedChannelId = channels.firstOrNull { channel -> channel.title == previousTitle }?.id,
+                    )
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: IOException) {
@@ -84,6 +111,7 @@ class TvIptvViewModel @Inject constructor(
     }
 
     fun play(channel: Channel) {
+        cancelChannelNumber()
         playJob?.cancel()
         _state.update { it.openPlayer(channel) }
         playJob = viewModelScope.launch {
@@ -104,10 +132,12 @@ class TvIptvViewModel @Inject constructor(
     }
 
     fun previousChannel() {
+        cancelChannelNumber()
         switchChannel(-1)
     }
 
     fun nextChannel() {
+        cancelChannelNumber()
         switchChannel(1)
     }
 
@@ -125,12 +155,61 @@ class TvIptvViewModel @Inject constructor(
     }
 
     fun closePlayer() {
+        cancelChannelNumber()
         playJob?.cancel()
         playerManager.release()
         _state.update(TvIptvUiState::closePlayer)
     }
 
+    fun enterChannelDigit(digit: Int) {
+        require(digit in 0..9) { "A channel digit must be between 0 and 9" }
+        val state = _state.value
+        check(!state.loading && state.channels.isNotEmpty()) { "The IPTV channel list is not ready" }
+        numberSelectionJob?.cancel()
+        val number = (state.channelNumberInput + digit).trimStart('0').ifEmpty { "0" }
+        if (number.length > state.channels.size.toString().length) {
+            rejectChannelNumber(number)
+            return
+        }
+        _state.update { it.copy(channelNumberInput = number, rejectedChannelNumber = null) }
+        numberSelectionJob = viewModelScope.launch {
+            delay(1_500)
+            numberSelectionJob = null
+            confirmChannelNumber()
+        }
+    }
+
+    fun confirmChannelNumber() {
+        val state = _state.value
+        if (state.channelNumberInput.isEmpty()) return
+        numberSelectionJob?.cancel()
+        numberSelectionJob = null
+        val channel = state.channelNumberInput.toIntOrNull()?.let { state.channels.getOrNull(it - 1) }
+        if (channel == null) {
+            rejectChannelNumber(state.channelNumberInput)
+        } else {
+            play(channel)
+        }
+    }
+
+    fun cancelChannelNumber() {
+        numberSelectionJob?.cancel()
+        numberSelectionJob = null
+        _state.update { it.copy(channelNumberInput = "", rejectedChannelNumber = null) }
+    }
+
+    private fun rejectChannelNumber(number: String) {
+        Timber.tag("TvIptvViewModel").i("Unknown IPTV channel number: %s", number)
+        _state.update { it.copy(channelNumberInput = "", rejectedChannelNumber = number) }
+        numberSelectionJob = viewModelScope.launch {
+            delay(3_000)
+            _state.update { it.copy(rejectedChannelNumber = null) }
+            numberSelectionJob = null
+        }
+    }
+
     override fun onCleared() {
+        numberSelectionJob?.cancel()
         playJob?.cancel()
         playerManager.release()
         super.onCleared()

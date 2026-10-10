@@ -105,11 +105,41 @@ present. Before working with the excluded files, fetch the full working tree wit
 ## Simplified IPTV TV build
 
 The TV app starts directly in a DPad-focused four-column channel grid imported from
-[`app/tv/src/main/assets/iptv.m3u`](app/tv/src/main/assets/iptv.m3u). The bundled
-snapshot contains 191 entries from the local `Iptv.m3u`, including alternate
-sources for the same channel. No playlist URL, import action, favorites menu,
+[`app/tv/src/main/assets/iptv.m3u`](app/tv/src/main/assets/iptv.m3u) (1080P preferred)
+or [`app/tv/src/main/assets/iptv-4k.m3u`](app/tv/src/main/assets/iptv-4k.m3u)
+(4K preferred). Each bundled
+snapshot contains 150 unique channel names, curated from the 191 entries in the
+local `Iptv.m3u`. Each name retains one source, preferring a source that produced
+decoded media frames and then the selected resolution preference.
+Equal-resolution sources retain their original order. CCTV1–CCTV17
+occupy channel numbers 1–17; CCTV5+, the other central channels, provincial
+satellite channels, and the remaining local/specialty/radio channels follow.
+Numbers are the one-based bundled playlist positions, not database IDs, and
+are displayed prominently on every grid card. No playlist URL, import action, favorites menu,
 settings page, extension setup, or phone pairing is exposed in this TV UI.
 The phone app is unchanged.
+
+The button at the top right switches between **1080P preferred** (the default)
+and **4K preferred**, with the choice saved in the existing Settings DataStore
+under the TV-only `tv_iptv_prefer_4k` key. Each launch reads this setting before
+importing the appropriate list. No separate APK or build flag is required.
+1080P preferred selects the highest verified resolution at or below 1920×1080;
+4K preferred selects a verified 3840-wide-or-higher source when available.
+If the preferred resolution is unavailable, both modes retain the best verified
+alternative, including a 4K exception in 1080P mode, rather than losing channels.
+This is source selection, not transcoding or a limit on decoder output.
+Both lists contain the same 150 names and channel numbers. Switching cancels
+pending numeric input, reloads the list without autoplay, and restores the
+previously focused channel by name even when its database ID changes. Loading
+or saving errors show the retry UI and do not report the preference as changed.
+The button is available only on the grid, not during playback.
+
+Current probe evidence confirms separate 1080P/4K choices for CCTV16, 江苏卫视,
+and 四川卫视. 湖南卫视 and several other satellite channels only had verified
+4K sources; their other original addresses timed out. They therefore use the
+same verified 4K source in both modes until working lower-resolution sources
+are supplied. The 1080P-preferred list has eight such 4K channels; the
+4K-preferred list has eleven.
 
 Press the remote's OK/Select button on a channel to start playback. Back or the
 player's Close button stops playback and returns to the same list, restoring
@@ -117,19 +147,35 @@ the selected channel's focus and retaining list scroll state. Loading errors
 show a retry action, and stream errors remain visible in the player.
 In the grid, Left/Right move between columns and Up/Down move between rows.
 During playback, Up switches to the previous playlist entry and Down switches
-to the next entry, wrapping between the first and last entries. Alternate
-sources with the same channel name remain separate entries. Back/Close restores
+to the next entry, wrapping between the first and last entries. Back/Close restores
 focus to the currently playing entry, scrolling the grid to it when necessary.
+During normal playback the floating controls disappear after three seconds
+without input. OK/Select or Left/Right reveals them without pausing playback;
+once visible, OK/Select activates the focused button. Pausing, buffering,
+errors, and channel changes show the controls again. Up/Down channel switching
+and Back to the grid continue to work when the controls are hidden.
+On either page, standard remote digits 0–9 and numeric-keypad digits select by
+channel number. The input appears in a non-focusable overlay. After 1.5 seconds
+without another digit the selected channel starts; OK/Enter confirms immediately
+without also pausing or activating a grid card. Back cancels the pending input
+without leaving playback. Directional navigation cancels pending input before
+performing its normal action. Leading zeros are accepted; zero, out-of-range
+numbers, and input longer than the largest channel number show a temporary
+error without interrupting playback. Pending selection is cancelled when the
+activity stops, playback closes, or the playlist reloads.
 The TV player keeps the screen awake while its playback page is visible,
 including buffering, channel switches, and pauses. Returning to the grid
 restores the view's previous keep-screen-on setting. This uses Android's
 foreground-view mechanism, not a background wake lock or a device-wide
 screensaver setting; Android stops honoring it when the app is in the background.
 
-The playlist is embedded, but its 188 LAN streams still require the Mac's UDPxy
-service at `192.168.50.11:8888` and a reachable LAN connection. The three original
-external HTTP/HTTPS streams are retained unchanged and require Internet access.
-To update channels or change the Mac IP, replace the bundled M3U and rebuild the
+The playlist is embedded, but its 148 LAN streams still require the Mac's UDPxy
+service at `192.168.50.11:8888` and a reachable LAN connection. The two retained
+external HTTP/HTTPS streams require Internet access. Probing is a point-in-time
+check, not automatic runtime source failover; unique channels without a verified
+working source remain in the list and report playback errors when unavailable.
+To update channels or change the Mac IP, update both bundled M3Us while retaining
+identical name/order mappings and rebuild the
 TV APK. Merely editing the original file on the Mac does not update an installed
 APK.
 
@@ -154,7 +200,7 @@ Build the optimized TV release:
 ```
 
 The APK is written to
-`app/tv/build/outputs/published-apk/release/tv-1.0.5.apk`. The current release
+`app/tv/build/outputs/published-apk/release/tv-1.0.8.apk`. The current release
 configuration uses the existing debug signing key; it is not a production
 signing setup.
 
@@ -171,7 +217,7 @@ pointer click on the player's Close button.
 
 When changing R8 rules or Netty dependencies, test the actual release APK on
 Android 9 (API 28) as well as a newer Android TV device/emulator. Check the
-191-channel startup list, DPad selection, playback, Back/Close focus restoration,
+bundled-channel startup list, DPad selection, playback, Back/Close focus restoration,
 and repeated cold starts. Debug-only tests cannot detect this release regression.
 An ARM64 Android 9 AOSP emulator checks OS compatibility, not Zidoo's Realtek
 hardware or vendor firmware.
@@ -202,6 +248,50 @@ plugged-in stay-awake option disabled and screen timeout temporarily set to
 and retained `KEEP_SCREEN_ON` when switching channels. Back removed the flag
 and the grid allowed normal sleep after another 25 idle seconds. The emulator's
 original settings were restored after validation.
+
+TV 1.0.6 automatically hides the floating controls after three seconds of
+normal playback without input, moving focus to a separate video-page target.
+All ten Android 9 navigation/lifecycle tests passed, including the display
+interval, remote reveal without pausing, hidden-page switching/Back, and
+paused/buffering/error visibility. The optimized release was also checked with
+actual CCTV1 playback: controls hid, OK revealed them, pause kept them visible,
+resume hid them again, and hidden-page Down/Back restored the selected grid
+entry. The keep-screen-on behavior remained active and no crashes were observed.
+
+TV 1.0.7 adds numeric channel selection and the deduplicated, numbered list.
+All 191 original sources were probed; unsuccessful probes were retried with a
+longer decoding window and lower concurrency on a separate loopback-only proxy,
+without changing the normal IPTV service. The selected 150 channels include
+149 sources with decoded media frames. All CCTV1–CCTV17 sources were verified
+at 1080p or above. Eleven selected sources are 4K. The only unverified selected
+channel is `无锡生活`: its original external URL returns HTTP 404 and has no
+alternate source in the original list, so it is retained rather than silently
+removed. Availability and actual device codec support can change.
+Validation: all 46 TV unit tests and all 14 Android 9 navigation/lifecycle tests
+passed against the final playlist, including numeric debounce, immediate OK,
+numeric-keypad input, cancellation, invalid-number feedback, background
+cancellation, and return focus. An existing 191-channel installation was
+upgraded without clearing app data and showed the new 150-channel list.
+The optimized release was also checked for actual CCTV13 playback selected by
+digits, timeout selection, cancellation, invalid-number feedback without
+interrupting video, switching to CCTV12, and restoring grid focus. Controls
+still auto-hide, `KEEP_SCREEN_ON` remains active, and the crash buffer was empty.
+The APK signature and ZIP alignment passed validation, and its embedded M3U
+matches the source asset. The Zidoo Z9X remote and hardware decoder still need
+real-device confirmation.
+
+TV 1.0.8 adds the persisted, per-APK resolution preference and matching playlists.
+All 50 TV unit tests and all 15 Android 9 navigation/lifecycle tests passed,
+covering default and saved modes, load/save errors, preserved channel numbering,
+focus after switching sources, DPad access to the quality button, numeric
+selection, and activity recreation/relaunch. The optimized release was checked
+with actual CCTV16 playback: default 1080P requested `239.49.8.31:8000`,
+4K requested `239.49.0.109:8000`, and switching back restored the 1080P address.
+Both choices survived force-stop and a fresh process launch. The player still
+hid its controls and kept the screen awake, and the crash buffer was empty.
+Signature/ZIP alignment checks passed and both packaged playlists match their
+source assets. No new dependencies or database schema changes are required.
+Sony XR-55X91J and Zidoo Z9X hardware remain unverified.
 
 ## License
 

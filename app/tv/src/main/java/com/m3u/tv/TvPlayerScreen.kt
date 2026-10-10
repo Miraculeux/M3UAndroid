@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,11 +22,17 @@ import androidx.tv.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -44,7 +51,7 @@ import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import com.m3u.core.foundation.util.basic.title
 import com.m3u.data.database.model.Channel
 import com.m3u.i18n.R.string
-import kotlinx.coroutines.yield
+import kotlinx.coroutines.delay
 
 @Composable
 fun TvPlayerScreen(
@@ -61,6 +68,10 @@ fun TvPlayerScreen(
 ) {
     BackHandler(onBack = onBack)
     val playPauseFocusRequester = remember { FocusRequester() }
+    val videoFocusRequester = remember { FocusRequester() }
+    var controlsVisible by remember { mutableStateOf(true) }
+    var interactionCount by remember { mutableIntStateOf(0) }
+    val canAutoHide = isPlaying && playbackState == Player.STATE_READY && errorMessage == null
     val view = LocalView.current
 
     DisposableEffect(view) {
@@ -71,9 +82,25 @@ fun TvPlayerScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        yield()
-        playPauseFocusRequester.requestFocus()
+    LaunchedEffect(channel?.id, canAutoHide) {
+        controlsVisible = true
+        interactionCount++
+    }
+
+    LaunchedEffect(controlsVisible, canAutoHide, interactionCount) {
+        if (controlsVisible && canAutoHide) {
+            delay(3_000)
+            controlsVisible = false
+        }
+    }
+
+    LaunchedEffect(controlsVisible) {
+        repeat(2) { withFrameNanos { } }
+        if (controlsVisible) {
+            playPauseFocusRequester.requestFocus()
+        } else {
+            videoFocusRequester.requestFocus()
+        }
     }
 
     Box(
@@ -82,13 +109,37 @@ fun TvPlayerScreen(
             .background(Color.Black)
             .onPreviewKeyEvent { event ->
                 when (event.key) {
+                    Key.Back -> {
+                        if (event.type == KeyEventType.KeyUp) onBack()
+                        true
+                    }
                     Key.DirectionUp, Key.DirectionDown -> {
                         if (event.type == KeyEventType.KeyUp) {
+                            controlsVisible = true
+                            interactionCount++
                             if (event.key == Key.DirectionUp) onPreviousChannel() else onNextChannel()
                         }
                         true
                     }
-                    else -> false
+                    else -> {
+                        val revealControls = !controlsVisible && (
+                            event.key == Key.DirectionLeft || event.key == Key.DirectionRight ||
+                                event.key == Key.DirectionCenter || event.key == Key.Enter ||
+                                event.key == Key.NumPadEnter
+                            )
+                        if (revealControls) {
+                            if (event.type == KeyEventType.KeyUp) {
+                                controlsVisible = true
+                                interactionCount++
+                            }
+                            true
+                        } else {
+                            if (event.type == KeyEventType.KeyDown && controlsVisible) {
+                                interactionCount++
+                            }
+                            false
+                        }
+                    }
                 }
             }
     ) {
@@ -99,7 +150,15 @@ fun TvPlayerScreen(
                 modifier = Modifier.fillMaxSize()
             )
         }
-        Row(
+        if (!controlsVisible) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .focusRequester(videoFocusRequester)
+                    .focusable()
+            )
+        }
+        if (controlsVisible) Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -121,7 +180,10 @@ fun TvPlayerScreen(
                 } else {
                     stringResource(string.tv_action_play)
                 },
-                onClick = onPlayPause,
+                onClick = {
+                    interactionCount++
+                    onPlayPause()
+                },
                 focusRequester = playPauseFocusRequester
             )
             TvIconActionButton(
