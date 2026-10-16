@@ -21,9 +21,30 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
+enum class TvIptvTab {
+    Favorite,
+    All;
+
+    fun channelsFrom(channels: List<Channel>): List<Channel> = when (this) {
+        Favorite -> favoriteTitles.mapNotNull { title ->
+            channels.firstOrNull { it.title.trim().equals(title, ignoreCase = true) }
+        }
+        All -> channels
+    }
+
+    private companion object {
+        val favoriteTitles = listOf(
+            "CCTV1", "CCTV2", "CCTV13", "CCTV9", "CCTV10", "CCTV5", "CCTV5+", "CCTV16",
+            "江苏卫视", "浙江卫视", "东方卫视", "北京卫视",
+        )
+    }
+}
+
 @Immutable
 data class TvIptvUiState(
     val channels: List<Channel> = emptyList(),
+    val allChannels: List<Channel> = emptyList(),
+    val selectedTab: TvIptvTab = TvIptvTab.Favorite,
     val loading: Boolean = true,
     val loadFailed: Boolean = false,
     val restoringPlayback: Boolean = false,
@@ -94,6 +115,21 @@ class TvIptvViewModel @Inject constructor(
         loadPlaylist(value)
     }
 
+    fun selectTab(tab: TvIptvTab) {
+        val state = _state.value
+        if (state.loading || state.playingChannel != null || state.selectedTab == tab) return
+        cancelChannelNumber()
+        _state.update {
+            val channels = tab.channelsFrom(it.allChannels)
+            it.copy(
+                selectedTab = tab,
+                channels = channels,
+                focusedChannelId = channels.firstOrNull { channel -> channel.id == it.focusedChannelId }?.id
+                    ?: channels.firstOrNull()?.id,
+            )
+        }
+    }
+
     private fun loadPlaylist(requestedQuality: IptvQuality?) {
         cancelChannelNumber()
         loadJob?.cancel()
@@ -108,11 +144,15 @@ class TvIptvViewModel @Inject constructor(
                 }
                 val previousTitle = _state.value.channels
                     .firstOrNull { it.id == _state.value.focusedChannelId }?.title
-                val channels = bundledIptvRepository.load(quality)
-                check(channels.isNotEmpty()) { "The bundled IPTV playlist has no channels" }
+                val allChannels = bundledIptvRepository.load(quality).filterNot {
+                    it.category.contains("广播") || it.title.contains("广播") ||
+                        it.category.trim().equals("radio", ignoreCase = true)
+                }
+                check(allChannels.isNotEmpty()) { "The bundled IPTV playlist has no television channels" }
+                val channels = _state.value.selectedTab.channelsFrom(allChannels)
                 if (requestedQuality != null) bundledIptvRepository.setQuality(quality)
                 val startupChannel = if (startupPlaybackPending) {
-                    channels.firstOrNull { it.title == lastChannelTitle } ?: channels.first().also {
+                    allChannels.firstOrNull { it.title == lastChannelTitle } ?: allChannels.first().also {
                         if (lastChannelTitle != null) {
                             Timber.tag("TvIptvViewModel").i(
                                 "Saved IPTV channel %s is unavailable; starting the first channel",
@@ -126,6 +166,7 @@ class TvIptvViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         channels = channels,
+                        allChannels = allChannels,
                         loading = false,
                         restoringPlayback = false,
                         quality = quality,
@@ -191,8 +232,12 @@ class TvIptvViewModel @Inject constructor(
         val state = _state.value
         val playingChannel = state.playingChannel ?: return
         val index = state.channels.indexOfFirst { it.id == playingChannel.id }
-        check(index >= 0) { "The playing IPTV channel is missing from the channel list" }
-        val nextIndex = (index + offset + state.channels.size) % state.channels.size
+        check(state.channels.isNotEmpty()) { "The selected IPTV tab has no channels" }
+        val nextIndex = if (index < 0) {
+            if (offset > 0) 0 else state.channels.lastIndex
+        } else {
+            (index + offset + state.channels.size) % state.channels.size
+        }
         play(state.channels[nextIndex])
     }
 

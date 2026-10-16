@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -119,14 +120,17 @@ fun App(viewModel: TvIptvViewModel = hiltViewModel()) {
                 onNextChannel = viewModel::nextChannel,
             )
         } else {
-            TvIptvChannelList(
-                state = state,
-                listState = listState,
-                onFocus = viewModel::focusChannel,
-                onPlay = viewModel::play,
-                onRetry = viewModel::loadPlaylist,
-                onQuality = viewModel::setQuality,
-            )
+            key(state.selectedTab) {
+                TvIptvChannelList(
+                    state = state,
+                    listState = listState,
+                    onFocus = viewModel::focusChannel,
+                    onPlay = viewModel::play,
+                    onRetry = viewModel::loadPlaylist,
+                    onQuality = viewModel::setQuality,
+                    onTab = viewModel::selectTab,
+                )
+            }
         }
         BackHandler(enabled = state.channelNumberInput.isNotEmpty()) {
             viewModel.cancelChannelNumber()

@@ -7,6 +7,9 @@
     <string name="ui_destination_favourite">喜欢</string>
     <string name="ui_destination_setting">设置</string>
     <string name="tv_iptv_title">IPTV 频道列表</string>
+    <string name="tv_iptv_tab_favorite">Favorite</string>
+    <string name="tv_iptv_tab_all">全部</string>
+    <string name="tv_iptv_tab_empty">此页签暂无频道。</string>
     <string name="tv_iptv_channel_label">%1$d. %2$s · %3$s</string>
     <string name="tv_iptv_number_input">频道 %1$s</string>
     <string name="tv_iptv_number_hint">停顿 1.5 秒或按 OK 播放；返回取消。</string>

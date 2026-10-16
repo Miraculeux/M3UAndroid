@@ -56,6 +56,134 @@ class TvIptvViewModelTest {
     }
 
     @Test
+    fun `Favorite is the default and uses the requested order in every quality mode`() = runTest {
+        val titles = listOf(
+            "CCTV1", "CCTV2", "CCTV13", "CCTV9", "CCTV10", "CCTV5", "CCTV5+", "CCTV16",
+            "江苏卫视", "浙江卫视", "东方卫视", "北京卫视",
+        )
+        val entries = (titles.reversed() + "CCTV3").mapIndexed { index, title ->
+            channels.first().copy(id = index + 10, title = title)
+        }
+        for (quality in IptvQuality.entries) {
+            val repository = FakeBundledIptvRepository { entries }.apply { savedQuality = quality }
+            val viewModel = TvIptvViewModel(repository, FakePlayerManager())
+            runCurrent()
+            assertEquals(TvIptvTab.Favorite, viewModel.state.value.selectedTab)
+            assertEquals(titles, viewModel.state.value.channels.map(Channel::title))
+            assertEquals(entries.map(Channel::title), viewModel.state.value.allChannels.map(Channel::title))
+            viewModel.closePlayer()
+        }
+    }
+
+    @Test
+    fun `radio is excluded from every tab and saved radio cannot resume`() = runTest {
+        val entries = channels + listOf(
+            channels.first().copy(id = 3, title = "金陵之声", category = "广播"),
+            channels.first().copy(id = 4, title = "江苏新闻广播", category = "其他"),
+            channels.first().copy(id = 5, title = "FM", category = "Radio"),
+        )
+        for (quality in IptvQuality.entries) {
+            val repository = FakeBundledIptvRepository { entries }.apply {
+                savedQuality = quality
+                savedChannelTitle = "金陵之声"
+            }
+            val viewModel = TvIptvViewModel(repository, FakePlayerManager())
+            runCurrent()
+            assertEquals("CCTV1", viewModel.state.value.playingChannel?.title)
+            assertEquals(listOf("CCTV1", "CCTV2"), viewModel.state.value.allChannels.map(Channel::title))
+            viewModel.closePlayer()
+            viewModel.selectTab(TvIptvTab.All)
+            assertEquals(listOf("CCTV1", "CCTV2"), viewModel.state.value.channels.map(Channel::title))
+        }
+    }
+
+    @Test
+    fun `tab selection cancels numeric input and maps numbering and switching to that tab`() = runTest {
+        val entries = channels + listOf(
+            channels.first().copy(id = 3, title = "CCTV3"),
+            channels.first().copy(id = 13, title = "CCTV13"),
+        )
+        val player = FakePlayerManager()
+        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { entries }, player)
+        runCurrent()
+        viewModel.closePlayer()
+        viewModel.enterChannelDigit(2)
+        viewModel.selectTab(TvIptvTab.All)
+        assertEquals("", viewModel.state.value.channelNumberInput)
+        assertEquals(entries, viewModel.state.value.channels)
+        viewModel.enterChannelDigit(3)
+        viewModel.confirmChannelNumber()
+        runCurrent()
+        assertEquals("CCTV3", viewModel.state.value.playingChannel?.title)
+        viewModel.closePlayer()
+        viewModel.selectTab(TvIptvTab.Favorite)
+        viewModel.enterChannelDigit(3)
+        viewModel.confirmChannelNumber()
+        runCurrent()
+        assertEquals("CCTV13", viewModel.state.value.playingChannel?.title)
+        viewModel.nextChannel()
+        runCurrent()
+        assertEquals("CCTV1", viewModel.state.value.playingChannel?.title)
+        viewModel.previousChannel()
+        runCurrent()
+        assertEquals("CCTV13", viewModel.state.value.playingChannel?.title)
+        viewModel.closePlayer()
+        assertEquals(13, viewModel.state.value.focusedChannelId)
+        assertEquals(TvIptvTab.Favorite, viewModel.state.value.selectedTab)
+    }
+
+    @Test
+    fun `saved nonfavorite television resumes and switching enters the default tab`() = runTest {
+        val entries = channels + channels.first().copy(id = 3, title = "CCTV3")
+        for (next in listOf(true, false)) {
+            val repository = FakeBundledIptvRepository { entries }.apply { savedChannelTitle = "CCTV3" }
+            val viewModel = TvIptvViewModel(repository, FakePlayerManager())
+            runCurrent()
+            assertEquals("CCTV3", viewModel.state.value.playingChannel?.title)
+            assertEquals(TvIptvTab.Favorite, viewModel.state.value.selectedTab)
+            if (next) viewModel.nextChannel() else viewModel.previousChannel()
+            runCurrent()
+            assertEquals(if (next) "CCTV1" else "CCTV2", viewModel.state.value.playingChannel?.title)
+            viewModel.closePlayer()
+        }
+    }
+
+    @Test
+    fun `quality changes preserve tab and focused channel while remapping ids`() = runTest {
+        val entries = channels + channels.first().copy(id = 13, title = "CCTV13")
+        val viewModel = TvIptvViewModel(FakeBundledIptvRepository { entries }, FakePlayerManager())
+        runCurrent()
+        viewModel.closePlayer()
+        viewModel.focusChannel(entries.last())
+        viewModel.setQuality(IptvQuality.UHD_LOW)
+        runCurrent()
+        assertEquals(TvIptvTab.Favorite, viewModel.state.value.selectedTab)
+        assertEquals(listOf("CCTV1", "CCTV2", "CCTV13"), viewModel.state.value.channels.map(Channel::title))
+        assertEquals(213, viewModel.state.value.focusedChannelId)
+        viewModel.selectTab(TvIptvTab.All)
+        viewModel.setQuality(IptvQuality.UHD_HIGH)
+        runCurrent()
+        assertEquals(TvIptvTab.All, viewModel.state.value.selectedTab)
+        assertEquals(113, viewModel.state.value.focusedChannelId)
+    }
+
+    @Test
+    fun `bundled assets provide exactly twelve favorites and 140 television channels per quality`() {
+        val expected = listOf(
+            "CCTV1", "CCTV2", "CCTV13", "CCTV9", "CCTV10", "CCTV5", "CCTV5+", "CCTV16",
+            "江苏卫视", "浙江卫视", "东方卫视", "北京卫视",
+        )
+        for (quality in IptvQuality.entries) {
+            val metadata = checkNotNull(javaClass.classLoader?.getResource(quality.assetName))
+                .readText().lineSequence().filter { it.startsWith("#EXTINF:") }.toList()
+            val television = metadata.filterNot { it.contains("group-title=\"广播\"") }
+                .mapIndexed { index, line -> channels.first().copy(id = index + 1, title = line.substringAfterLast(',')) }
+            assertEquals(140, television.size)
+            assertEquals(expected, TvIptvTab.Favorite.channelsFrom(television).map(Channel::title))
+        }
+    }
+
+    @Test
     fun `startup waits for import then automatically plays CCTV1 when no channel is saved`() = runTest {
         val importedChannels = CompletableDeferred<List<Channel>>()
         val player = FakePlayerManager()
@@ -785,6 +913,7 @@ class TvIptvViewModelTest {
         val viewModel = TvIptvViewModel(repository, player)
         runCurrent()
         viewModel.closePlayer()
+        viewModel.selectTab(TvIptvTab.All)
         runCurrent()
         player.commands.clear()
         player.releaseCount = 0

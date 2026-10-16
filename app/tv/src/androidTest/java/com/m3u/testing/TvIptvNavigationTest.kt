@@ -22,6 +22,7 @@ import com.m3u.i18n.R.string
 import com.m3u.tv.MainActivity
 import com.m3u.tv.TvPlayerScreen
 import com.m3u.tv.TvIptvViewModel
+import com.m3u.tv.TvIptvTab
 import com.m3u.data.database.model.Channel
 import com.m3u.data.repository.playlist.IptvQuality
 import com.m3u.core.foundation.architecture.preferences.settings
@@ -40,11 +41,133 @@ class TvIptvNavigationTest {
     private val timeout = 15_000L
 
     @Test
+    fun backFromScrolledChannelReturnsToSelectedTabThenExits() {
+        for (tab in TvIptvTab.entries) {
+            launchOnGrid(tab = tab).use { scenario ->
+                val row = if (tab == TvIptvTab.Favorite) 2 else 9
+                repeat(row) { assertTrue(device.pressDPadDown()) }
+                val index = 1 + row * 4
+                var channel: Channel? = null
+                scenario.onActivity { activity ->
+                    channel = ViewModelProvider(activity)[TvIptvViewModel::class.java].state.value.channels[index - 1]
+                }
+                val selectedChannel = checkNotNull(channel)
+                waitForChannelFocus(index, selectedChannel.title, selectedChannel.category)
+                device.executeShellCommand("input keyevent 4")
+                val label = context.getString(
+                    if (tab == TvIptvTab.Favorite) string.tv_iptv_tab_favorite else string.tv_iptv_tab_all
+                )
+                waitForFocus(label)
+                assertTrue(device.hasObject(By.desc(label).selected(true)))
+                assertEquals(Lifecycle.State.RESUMED, scenario.state)
+                scenario.onActivity { activity ->
+                    val state = ViewModelProvider(activity)[TvIptvViewModel::class.java].state.value
+                    assertEquals(tab, state.selectedTab)
+                    assertEquals(selectedChannel.id, state.focusedChannelId)
+                }
+                assertTrue(device.pressBack())
+                assertTrue(device.wait(Until.gone(By.pkg(context.packageName)), timeout))
+            }
+        }
+    }
+
+    @Test
+    fun backDuringNumericInputCancelsBeforeReturningToTopMenu() {
+        launchOnGrid(tab = TvIptvTab.Favorite).use { scenario ->
+            device.executeShellCommand("input keyevent 9")
+            device.executeShellCommand("input keyevent 4")
+            waitForChannelFocus(index = 1)
+            scenario.onActivity { activity ->
+                val state = ViewModelProvider(activity)[TvIptvViewModel::class.java].state.value
+                assertEquals("", state.channelNumberInput)
+                assertEquals(null, state.playingChannel)
+            }
+            device.executeShellCommand("input keyevent 4")
+            val label = context.getString(string.tv_iptv_tab_favorite)
+            waitForFocus(label)
+        }
+    }
+
+    @Test
+    fun backFromQualityMenuExitsWithoutReturningToTab() {
+        launchOnGrid(tab = TvIptvTab.Favorite).use { scenario ->
+            assertTrue(device.pressDPadUp())
+            assertTrue(device.pressDPadUp())
+            var quality = IptvQuality.HD
+            scenario.onActivity { activity ->
+                quality = ViewModelProvider(activity)[TvIptvViewModel::class.java].state.value.quality
+            }
+            val label = context.getString(
+                when (quality) {
+                    IptvQuality.HD -> string.tv_iptv_quality_1080p
+                    IptvQuality.UHD_LOW -> string.tv_iptv_quality_4k_low
+                    IptvQuality.UHD_HIGH -> string.tv_iptv_quality_4k_high
+                }
+            )
+            waitForFocus(label)
+            assertTrue(device.pressBack())
+            assertTrue(device.wait(Until.gone(By.pkg(context.packageName)), timeout))
+        }
+    }
+
+    @Test
+    fun favoriteIsDefaultAndTabsAreReachableByDpad() {
+        launchOnGrid(tab = TvIptvTab.Favorite).use { scenario ->
+            val favoriteLabel = context.getString(string.tv_iptv_tab_favorite)
+            val allLabel = context.getString(string.tv_iptv_tab_all)
+            val count = context.resources.getQuantityString(plurals.tv_channel_count, 12, 12)
+            assertTrue(device.hasObject(By.text(count)))
+            assertTrue(device.hasObject(By.desc(favoriteLabel).selected(true)))
+            assertTrue(device.pressDPadUp())
+            waitForFocus(favoriteLabel)
+            assertTrue(device.pressDPadRight())
+            waitForFocus(allLabel)
+            assertTrue(device.pressDPadCenter())
+            waitForChannelFocus(index = 1)
+            assertTrue(device.hasObject(By.desc(allLabel).selected(true)))
+            val allCount = context.resources.getQuantityString(plurals.tv_channel_count, 140, 140)
+            assertTrue(device.hasObject(By.text(allCount)))
+            scenario.onActivity { activity ->
+                val state = ViewModelProvider(activity)[TvIptvViewModel::class.java].state.value
+                assertEquals(140, state.channels.size)
+                assertFalse(state.channels.any { it.category == "广播" })
+            }
+            assertTrue(device.pressDPadUp())
+            waitForFocus(allLabel)
+            assertTrue(device.pressDPadLeft())
+            assertTrue(device.pressDPadCenter())
+            waitForChannelFocus(index = 1)
+            assertTrue(device.hasObject(By.text(count)))
+            assertTrue(device.pressDPadRight())
+            assertTrue(device.pressDPadRight())
+            waitForChannelFocus(index = 3, title = "CCTV13")
+            scenario.recreate()
+            waitForChannelFocus(index = 3, title = "CCTV13")
+        }
+    }
+
+    @Test
+    fun favoriteNumericAndPlayerSwitchingFollowFavoriteOrder() {
+        launchOnGrid(tab = TvIptvTab.Favorite).use {
+            val closeLabel = context.getString(string.tv_action_close_player)
+            device.executeShellCommand("input keyevent 10 23")
+            assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
+            assertTrue(device.pressBack())
+            waitForChannelFocus(index = 3, title = "CCTV13")
+            assertTrue(device.pressDPadCenter())
+            assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
+            assertTrue(device.pressDPadUp())
+            assertTrue(device.pressBack())
+            waitForChannelFocus(index = 4, title = "CCTV9")
+        }
+    }
+
+    @Test
     fun returningToGridShowsAllChannelsWithoutDuplicatingThemOnRelaunch() {
         repeat(2) {
             launchOnGrid().use {
                 waitForChannelFocus(index = 1)
-                val count = context.resources.getQuantityString(plurals.tv_channel_count, 150, 150)
+                val count = context.resources.getQuantityString(plurals.tv_channel_count, 140, 140)
                 assertTrue(device.hasObject(By.text(count)))
             }
         }
@@ -54,7 +177,7 @@ class TvIptvNavigationTest {
     fun returningToGridShowsOnlyChannelsWithInitialDpadFocus() {
         launchOnGrid().use {
             waitForChannelFocus(index = 1)
-            val count = context.resources.getQuantityString(plurals.tv_channel_count, 150, 150)
+            val count = context.resources.getQuantityString(plurals.tv_channel_count, 140, 140)
             assertTrue(device.hasObject(By.text(count)))
             listOf(
                 string.tv_home_title,
@@ -307,7 +430,7 @@ class TvIptvNavigationTest {
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
             assertTrue(device.pressDPadDown())
             assertTrue(device.pressBack())
-            waitForChannelFocus(index = 150, title = "江苏健康广播", category = "广播")
+            waitForChannelFocus(index = 140, title = "江苏导视", category = "地方")
 
             assertTrue(device.pressDPadCenter())
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
@@ -389,6 +512,7 @@ class TvIptvNavigationTest {
                     waitForChannelFocus(index = 1)
                     assertTrue(device.hasObject(By.desc(labels[quality.ordinal])))
                     assertTrue(device.pressDPadUp())
+                    assertTrue(device.pressDPadUp())
                     refreshAccessibilityCache()
                     assertTrue(device.wait(Until.hasObject(By.desc(labels[quality.ordinal]).focused(true)), timeout))
                     assertTrue(device.pressDPadCenter())
@@ -468,15 +592,15 @@ class TvIptvNavigationTest {
             }
         }
         val closeLabel = context.getString(string.tv_action_close_player)
-        val count = context.resources.getQuantityString(plurals.tv_channel_count, 150, 150)
+        val count = context.resources.getQuantityString(plurals.tv_channel_count, 12, 12)
         ActivityScenario.launch(MainActivity::class.java).use {
             assertTrue(device.wait(Until.hasObject(By.text("CCTV1")), timeout))
             assertFalse(device.hasObject(By.text(count)))
-            device.executeShellCommand("input keyevent 8 10 23")
+            device.executeShellCommand("input keyevent 10 23")
             assertTrue(device.wait(Until.hasObject(By.text("CCTV13")), timeout))
             assertFalse(device.hasObject(By.text(count)))
             assertTrue(device.pressBack())
-            waitForChannelFocus(index = 13)
+            waitForChannelFocus(index = 3, title = "CCTV13")
         }
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             assertTrue(device.wait(Until.hasObject(By.text("CCTV13")), timeout))
@@ -490,7 +614,7 @@ class TvIptvNavigationTest {
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
             assertFalse(device.hasObject(By.text(count)))
             device.findObject(By.desc(closeLabel)).click()
-            waitForChannelFocus(index = 13)
+            waitForChannelFocus(index = 3, title = "CCTV13")
         }
     }
 
@@ -518,7 +642,7 @@ class TvIptvNavigationTest {
             scenario.onActivity { activity ->
                 assertSame(originalViewModel, ViewModelProvider(activity)[TvIptvViewModel::class.java])
             }
-            val count = context.resources.getQuantityString(plurals.tv_channel_count, 150, 150)
+            val count = context.resources.getQuantityString(plurals.tv_channel_count, 140, 140)
             assertFalse(device.hasObject(By.text(count)))
             assertScreenKeptAwake(scenario, expected = true)
             device.pressBack()
@@ -583,7 +707,7 @@ class TvIptvNavigationTest {
         }
     }
 
-    private fun launchOnGrid(): ActivityScenario<MainActivity> {
+    private fun launchOnGrid(tab: TvIptvTab = TvIptvTab.All): ActivityScenario<MainActivity> {
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
             val closeLabel = context.getString(string.tv_action_close_player)
@@ -592,6 +716,16 @@ class TvIptvNavigationTest {
             assertTrue(device.wait(Until.hasObject(By.text("CCTV1")), timeout))
             assertTrue(device.pressBack())
             waitForChannelFocus(index = 1)
+            if (tab != TvIptvTab.Favorite) {
+                assertTrue(device.pressDPadUp())
+                val favoriteLabel = context.getString(string.tv_iptv_tab_favorite)
+                waitForFocus(favoriteLabel)
+                assertTrue(device.pressDPadRight())
+                val allLabel = context.getString(string.tv_iptv_tab_all)
+                waitForFocus(allLabel)
+                assertTrue(device.pressDPadCenter())
+                waitForChannelFocus(index = 1)
+            }
             return scenario
         } catch (error: Throwable) {
             scenario.close()
@@ -599,14 +733,19 @@ class TvIptvNavigationTest {
         }
     }
 
+    private fun waitForFocus(label: String) {
+        val deadline = SystemClock.uptimeMillis() + timeout
+        do {
+            refreshAccessibilityCache()
+            if (device.hasObject(By.desc(label).focused(true))) return
+            SystemClock.sleep(100)
+        } while (SystemClock.uptimeMillis() < deadline)
+        assertTrue("Expected focus on $label; actual: ${focusedLabels()}", false)
+    }
+
     private fun waitForChannelFocus(index: Int, title: String = "CCTV$index", category: String = "央视") {
         val label = context.getString(string.tv_iptv_channel_label, index, title, category)
-        refreshAccessibilityCache()
-        val focused = device.wait(Until.hasObject(By.desc(label).focused(true)), timeout)
-        assertTrue(
-            "Expected DPad focus on channel $index; actual: ${focusedLabels()}",
-            focused,
-        )
+        waitForFocus(label)
     }
 
     private fun focusedLabels(): List<String?> =

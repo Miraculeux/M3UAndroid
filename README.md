@@ -117,10 +117,23 @@ Duplicate sources were retested locally for time to first media, transfer gaps,
 TS continuity, resolution, frame rate, and decoded frames. Within each bitrate
 tier, cleaner transport is preferred; inconclusive ties retain original order.
 CCTV1–CCTV17
-occupy channel numbers 1–17; CCTV5+, the other central channels, provincial
-satellite channels, and the remaining local/specialty/radio channels follow.
-Numbers are the one-based bundled playlist positions, not database IDs, and
-are displayed prominently on every grid card. No playlist URL, import action, favorites menu,
+occupy channel numbers 1–17 in **All**; CCTV5+, the other central channels, provincial
+satellite channels, and the remaining local/specialty channels follow.
+Radio channels are excluded in the TV app for all quality modes, without editing
+the playlist files. The grid defaults to **Favorite**, in this order: CCTV1,
+CCTV2, CCTV13, CCTV9, CCTV10, CCTV5, CCTV5+, CCTV16, 江苏卫视, 浙江卫视,
+东方卫视, 北京卫视. **All** shows the remaining 140 television channels in
+playlist order, including those in Favorite. Use DPad Up from the first grid
+row to reach the tabs, Left/Right to choose, and OK to switch.
+Back from any focused channel moves focus to the selected tab at the top
+without changing tabs or the remembered channel. Back from the top menu
+leaves the app using the normal Android Back behavior. Pending numeric input
+is cancelled first; Back during playback still returns to the channel grid.
+Numbers are the one-based positions in the selected tab, not database IDs, and
+are displayed prominently on every grid card. Numeric selection and Up/Down
+channel switching use that same tab order and wrap within it. The selected tab
+survives playback, quality changes, and activity recreation; a new app session
+defaults to Favorite. No playlist URL, import action, editable favorites menu,
 settings page, extension setup, or phone pairing is exposed in this TV UI.
 The phone app is unchanged.
 
@@ -135,6 +148,10 @@ URL, so changing resolution does not change the resumed channel. Merely moving
 grid focus does not change the saved channel. Startup import/read failures show
 the retry UI; retry still performs startup playback. Playback errors remain
 visible rather than silently selecting another channel.
+Saved television channels outside Favorite still resume at startup. Returning
+to the default Favorite grid focuses its first channel; the next Up/Down channel
+switch enters Favorite at its first/last channel respectively.
+Previously saved radio channels are treated as unavailable and resume CCTV1.
 Returning from the launcher also restores playback when Android retains the
 same activity/ViewModel after Back exits the root task or Home backgrounds it.
 On a real background stop, pending import/play work is cancelled and the
