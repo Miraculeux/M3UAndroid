@@ -34,8 +34,9 @@ enum class TvIptvTab {
 
     private companion object {
         val favoriteTitles = listOf(
-            "CCTV1", "CCTV2", "CCTV13", "CCTV9", "CCTV10", "CCTV5", "CCTV5+", "CCTV16",
-            "江苏卫视", "浙江卫视", "东方卫视", "北京卫视",
+            "CCTV1", "CCTV2", "CCTV3", "CCTV4", "CCTV5", "CCTV5+", "CCTV6", "CCTV8",
+            "CCTV9", "CCTV10", "CCTV11", "CCTV12", "CCTV13", "CCTV16",
+            "江苏卫视", "浙江卫视", "东方卫视", "北京卫视", "湖南卫视",
         )
     }
 }

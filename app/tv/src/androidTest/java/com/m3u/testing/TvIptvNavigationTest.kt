@@ -115,7 +115,7 @@ class TvIptvNavigationTest {
         launchOnGrid(tab = TvIptvTab.Favorite).use { scenario ->
             val favoriteLabel = context.getString(string.tv_iptv_tab_favorite)
             val allLabel = context.getString(string.tv_iptv_tab_all)
-            val count = context.resources.getQuantityString(plurals.tv_channel_count, 12, 12)
+            val count = context.resources.getQuantityString(plurals.tv_channel_count, 19, 19)
             assertTrue(device.hasObject(By.text(count)))
             assertTrue(device.hasObject(By.desc(favoriteLabel).selected(true)))
             assertTrue(device.pressDPadUp())
@@ -140,9 +140,9 @@ class TvIptvNavigationTest {
             assertTrue(device.hasObject(By.text(count)))
             assertTrue(device.pressDPadRight())
             assertTrue(device.pressDPadRight())
-            waitForChannelFocus(index = 3, title = "CCTV13")
+            waitForChannelFocus(index = 3, title = "CCTV3")
             scenario.recreate()
-            waitForChannelFocus(index = 3, title = "CCTV13")
+            waitForChannelFocus(index = 3, title = "CCTV3")
         }
     }
 
@@ -153,12 +153,12 @@ class TvIptvNavigationTest {
             device.executeShellCommand("input keyevent 10 23")
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
             assertTrue(device.pressBack())
-            waitForChannelFocus(index = 3, title = "CCTV13")
+            waitForChannelFocus(index = 3, title = "CCTV3")
             assertTrue(device.pressDPadCenter())
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
             assertTrue(device.pressDPadUp())
             assertTrue(device.pressBack())
-            waitForChannelFocus(index = 4, title = "CCTV9")
+            waitForChannelFocus(index = 4, title = "CCTV4")
         }
     }
 
@@ -592,15 +592,15 @@ class TvIptvNavigationTest {
             }
         }
         val closeLabel = context.getString(string.tv_action_close_player)
-        val count = context.resources.getQuantityString(plurals.tv_channel_count, 12, 12)
+        val count = context.resources.getQuantityString(plurals.tv_channel_count, 19, 19)
         ActivityScenario.launch(MainActivity::class.java).use {
             assertTrue(device.wait(Until.hasObject(By.text("CCTV1")), timeout))
             assertFalse(device.hasObject(By.text(count)))
-            device.executeShellCommand("input keyevent 10 23")
+            device.executeShellCommand("input keyevent 8 10 23")
             assertTrue(device.wait(Until.hasObject(By.text("CCTV13")), timeout))
             assertFalse(device.hasObject(By.text(count)))
             assertTrue(device.pressBack())
-            waitForChannelFocus(index = 3, title = "CCTV13")
+            waitForChannelFocus(index = 13, title = "CCTV13")
         }
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             assertTrue(device.wait(Until.hasObject(By.text("CCTV13")), timeout))
@@ -614,7 +614,7 @@ class TvIptvNavigationTest {
             assertTrue(device.wait(Until.hasObject(By.desc(closeLabel)), timeout))
             assertFalse(device.hasObject(By.text(count)))
             device.findObject(By.desc(closeLabel)).click()
-            waitForChannelFocus(index = 3, title = "CCTV13")
+            waitForChannelFocus(index = 13, title = "CCTV13")
         }
     }
 

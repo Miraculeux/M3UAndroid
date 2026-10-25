@@ -58,10 +58,11 @@ class TvIptvViewModelTest {
     @Test
     fun `Favorite is the default and uses the requested order in every quality mode`() = runTest {
         val titles = listOf(
-            "CCTV1", "CCTV2", "CCTV13", "CCTV9", "CCTV10", "CCTV5", "CCTV5+", "CCTV16",
-            "江苏卫视", "浙江卫视", "东方卫视", "北京卫视",
+            "CCTV1", "CCTV2", "CCTV3", "CCTV4", "CCTV5", "CCTV5+", "CCTV6", "CCTV8",
+            "CCTV9", "CCTV10", "CCTV11", "CCTV12", "CCTV13", "CCTV16",
+            "江苏卫视", "浙江卫视", "东方卫视", "北京卫视", "湖南卫视",
         )
-        val entries = (titles.reversed() + "CCTV3").mapIndexed { index, title ->
+        val entries = (titles.reversed() + "CCTV7").mapIndexed { index, title ->
             channels.first().copy(id = index + 10, title = title)
         }
         for (quality in IptvQuality.entries) {
@@ -100,7 +101,7 @@ class TvIptvViewModelTest {
     @Test
     fun `tab selection cancels numeric input and maps numbering and switching to that tab`() = runTest {
         val entries = channels + listOf(
-            channels.first().copy(id = 3, title = "CCTV3"),
+            channels.first().copy(id = 3, title = "CCTV7"),
             channels.first().copy(id = 13, title = "CCTV13"),
         )
         val player = FakePlayerManager()
@@ -114,7 +115,7 @@ class TvIptvViewModelTest {
         viewModel.enterChannelDigit(3)
         viewModel.confirmChannelNumber()
         runCurrent()
-        assertEquals("CCTV3", viewModel.state.value.playingChannel?.title)
+        assertEquals("CCTV7", viewModel.state.value.playingChannel?.title)
         viewModel.closePlayer()
         viewModel.selectTab(TvIptvTab.Favorite)
         viewModel.enterChannelDigit(3)
@@ -134,12 +135,12 @@ class TvIptvViewModelTest {
 
     @Test
     fun `saved nonfavorite television resumes and switching enters the default tab`() = runTest {
-        val entries = channels + channels.first().copy(id = 3, title = "CCTV3")
+        val entries = channels + channels.first().copy(id = 3, title = "CCTV7")
         for (next in listOf(true, false)) {
-            val repository = FakeBundledIptvRepository { entries }.apply { savedChannelTitle = "CCTV3" }
+            val repository = FakeBundledIptvRepository { entries }.apply { savedChannelTitle = "CCTV7" }
             val viewModel = TvIptvViewModel(repository, FakePlayerManager())
             runCurrent()
-            assertEquals("CCTV3", viewModel.state.value.playingChannel?.title)
+            assertEquals("CCTV7", viewModel.state.value.playingChannel?.title)
             assertEquals(TvIptvTab.Favorite, viewModel.state.value.selectedTab)
             if (next) viewModel.nextChannel() else viewModel.previousChannel()
             runCurrent()
@@ -168,10 +169,11 @@ class TvIptvViewModelTest {
     }
 
     @Test
-    fun `bundled assets provide exactly twelve favorites and 140 television channels per quality`() {
+    fun `bundled assets provide exactly nineteen favorites and 140 television channels per quality`() {
         val expected = listOf(
-            "CCTV1", "CCTV2", "CCTV13", "CCTV9", "CCTV10", "CCTV5", "CCTV5+", "CCTV16",
-            "江苏卫视", "浙江卫视", "东方卫视", "北京卫视",
+            "CCTV1", "CCTV2", "CCTV3", "CCTV4", "CCTV5", "CCTV5+", "CCTV6", "CCTV8",
+            "CCTV9", "CCTV10", "CCTV11", "CCTV12", "CCTV13", "CCTV16",
+            "江苏卫视", "浙江卫视", "东方卫视", "北京卫视", "湖南卫视",
         )
         for (quality in IptvQuality.entries) {
             val metadata = checkNotNull(javaClass.classLoader?.getResource(quality.assetName))
